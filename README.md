@@ -90,4 +90,5 @@ insert into household_settings (household_id) values ('<上の id>');
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=<key>
 supabase functions deploy generate-plan
+supabase functions deploy regenerate
 ```

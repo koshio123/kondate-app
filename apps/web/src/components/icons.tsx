@@ -60,6 +60,32 @@ export const PlusIcon = (p: IconProps) => (
   </StrokeIcon>
 );
 
+export const RefreshIcon = (p: IconProps) => (
+  <StrokeIcon {...p}>
+    <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+    <path d="M20 5v6h-6" />
+  </StrokeIcon>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <StrokeIcon {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M20 20l-4-4" />
+  </StrokeIcon>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <StrokeIcon {...p}>
+    <path d="M9 5l7 7-7 7" />
+  </StrokeIcon>
+);
+
+export const CloseIcon = (p: IconProps) => (
+  <StrokeIcon {...p}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </StrokeIcon>
+);
+
 export const AlertIcon = (p: IconProps) => (
   <StrokeIcon {...p}>
     <circle cx="12" cy="12" r="9" />

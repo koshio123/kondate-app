@@ -1,8 +1,17 @@
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
-import { AppMark, BackIcon } from "@/components/icons";
-import { useConfirmPlan, usePlan, useStartGeneration, type Plan } from "@/lib/plans";
+import { AppMark, BackIcon, RefreshIcon } from "@/components/icons";
+import { ResuggestSheet, type ResuggestTarget } from "@/components/ResuggestSheet";
+import {
+  useConfirmPlan,
+  usePlan,
+  useRegenerate,
+  useStartGeneration,
+  useSwapDish,
+  type Plan,
+} from "@/lib/plans";
 import { useBuildShoppingList } from "@/lib/shoppingList";
 
 /** S4 献立提案の確認 (also shows the generating / failed states). */
@@ -95,11 +104,51 @@ function Proposal({ plan }: { plan: Plan }) {
   const confirm = useConfirmPlan();
   const regenerate = useStartGeneration();
   const buildList = useBuildShoppingList();
+  const partial = useRegenerate();
+  const swap = useSwapDish();
+  const [sheet, setSheet] = useState<ResuggestTarget | null>(null);
+  const [busyDayId, setBusyDayId] = useState<string | null>(null);
   const general = plan.warnings.filter((w) => !w.date).map((w) => w.message);
+  const changing = partial.isPending || swap.isPending;
+  const changeError = partial.error ?? swap.error;
+
+  // A confirmed plan already has a shopping list; rebuild it so it matches (checks are kept).
+  const afterChange = () => {
+    if (plan.status === "confirmed") buildList.mutate(plan.id);
+  };
+
+  function regenerateTarget(target: ResuggestTarget, hint: string) {
+    setSheet(null);
+    setBusyDayId(target.day.id);
+    swap.reset();
+    partial.mutate(
+      { planId: plan.id, dayId: target.day.id, dishId: target.dish?.id, hint },
+      { onSuccess: afterChange, onSettled: () => setBusyDayId(null) },
+    );
+  }
+
+  function swapTarget(target: ResuggestTarget, recipeId: string) {
+    setSheet(null);
+    partial.reset();
+    if (target.dish) swap.mutate({ dishId: target.dish.id, recipeId }, { onSuccess: afterChange });
+  }
 
   return (
     <>
       <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+        <p className="mx-1 flex flex-wrap items-center gap-1 text-[13px] leading-relaxed text-muted">
+          気になる品は
+          <RefreshIcon size={14} className="text-primary" />
+          で入れ替えられます
+        </p>
+        {changeError ? (
+          <p
+            role="alert"
+            className="rounded-2xl border border-[#EBC3B6] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+          >
+            {changeError.message || "入れ替えられませんでした。もう一度お試しください。"}
+          </p>
+        ) : null}
         {general.length > 0 ? (
           <ul className="flex flex-col gap-1 rounded-2xl bg-primary-soft px-3.5 py-2.5">
             {general.map((message) => (
@@ -114,13 +163,36 @@ function Proposal({ plan }: { plan: Plan }) {
             key={day.id}
             day={day}
             warnings={plan.warnings.filter((w) => w.date === day.date).map((w) => w.message)}
+            edit={{
+              onDay: () => setSheet({ day }),
+              onDish: (dish) => setSheet({ day, dish }),
+              busy: busyDayId === day.id,
+              disabled: changing,
+            }}
           />
         ))}
       </main>
 
+      {sheet ? (
+        <ResuggestSheet
+          target={sheet}
+          onClose={() => setSheet(null)}
+          onRegenerate={(hint) => regenerateTarget(sheet, hint)}
+          onSwap={(recipeId) => swapTarget(sheet, recipeId)}
+        />
+      ) : null}
+
       <footer className="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-5 pt-3 pb-[max(24px,env(safe-area-inset-bottom))]">
         {plan.status === "confirmed" ? (
-          <p className="py-3 text-center text-sm font-bold text-leftover">この献立で決定済みです</p>
+          <p className="py-3 text-center text-sm leading-relaxed text-leftover">
+            <span className="font-bold">この献立で決定済みです</span>
+            <br />
+            <span className="text-xs">
+              {buildList.isPending
+                ? "買い物リストを更新しています…"
+                : "入れ替えると買い物リストも更新されます(チェックは残ります)"}
+            </span>
+          </p>
         ) : (
           <>
             {confirm.isError || regenerate.isError ? (
@@ -137,7 +209,9 @@ function Proposal({ plan }: { plan: Plan }) {
                     buildList.mutate(plan.id, { onSettled: () => navigate("/shopping") }),
                 })
               }
-              disabled={confirm.isPending || buildList.isPending || regenerate.isPending}
+              disabled={
+                confirm.isPending || buildList.isPending || regenerate.isPending || changing
+              }
               className="h-[52px] rounded-full bg-primary text-base font-bold text-white disabled:opacity-50"
             >
               {buildList.isPending ? "買い物リストを作っています…" : "決定して買い物リストを作る"}
@@ -145,8 +219,8 @@ function Proposal({ plan }: { plan: Plan }) {
             <button
               type="button"
               onClick={() => regenerate.mutate({ planId: plan.id })}
-              disabled={confirm.isPending || regenerate.isPending}
-              className="h-10 text-sm text-muted"
+              disabled={confirm.isPending || regenerate.isPending || changing}
+              className="h-10 text-sm text-muted disabled:opacity-50"
             >
               全体を作り直す
             </button>

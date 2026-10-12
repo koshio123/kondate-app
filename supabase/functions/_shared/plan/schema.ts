@@ -83,6 +83,16 @@ export const OUTLINE_SCHEMA = {
   },
 } as const;
 
+/** Re-suggesting one day or one dish: just the new dishes of that day. */
+export const DISHES_OUTLINE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["dishes"],
+  properties: {
+    dishes: { type: "array", items: outlineDish },
+  },
+} as const;
+
 /** Stage 2: ingredients and steps for the dishes of one day, in the given order. */
 export const DAY_DETAIL_SCHEMA = {
   type: "object",

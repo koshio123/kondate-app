@@ -59,7 +59,7 @@ flowchart LR
 | S4 | 献立提案の確認 | 日ごとの献立、品ごと・日ごとの「再提案」、お気に入りから差し替え、確定ボタン | F1, F1b, F8 |
 | S5 | 料理詳細 | 材料・分量、手順、調理時間、評価(★)・メモ、お気に入り登録 | F5 |
 | S6 | 買い物リスト | ジャンル別セクション、チェックボックス、購入済みを下に移動、手動追加 | F3, F4 |
-| S7 | お気に入り | 保存済み料理の一覧、検索、区分(主菜/副菜…)で絞り込み | F5 |
+| S7 | お気に入り | 保存済み料理の一覧(評価の高い順)、料理名・食材で検索、区分・15分以内で絞り込み | F5 |
 | S8 | 設定 | 家族メンバー、アレルギー・苦手食材、時短の上限時間、夕食の比率 | F13 |
 | S9 | 栄養サマリー | 期間の栄養素と目標の比較、アドバイス(出典付き) | F6, F7(第2段階) |
 
@@ -258,6 +258,7 @@ create policy "household access" on meal_plan_days
 | meal_plans, meal_plan_days | `save_plan_draft` RPC で期間と日ごとのモードを1トランザクションで作成・変更。決定(status = confirmed) |
 | leftovers | CRUD |
 | recipes | お気に入り・評価・メモの更新、手動登録 |
+| planned_dishes | `swap_planned_dish` RPC でお気に入りの料理に差し替え(提案中・決定済みの計画) |
 | shopping_lists, shopping_items | `replace_shopping_list` RPC でリストを保存(6章)。`checked` の更新、手動追加・削除 |
 
 ### 4.2 Edge Functions
@@ -289,14 +290,27 @@ create policy "household access" on meal_plan_days
 失敗時は `status = draft` に戻り、`generation_error` に画面表示用のメッセージが入る。
 警告(苦手食材、傷みやすい食材が後半、など)は `generation_meta.warnings` に入る。
 
-**regenerate**
+**regenerate**(同期。1日分か1品だけなので 20〜40 秒で終わり、保存してから応答する)
 
 ```jsonc
 // 日ごと
 { "meal_plan_day_id": "uuid", "hint": "魚以外で" }
 // 品ごと
-{ "planned_dish_id": "uuid", "hint": "もっとさっぱり" }
+{ "meal_plan_day_id": "uuid", "planned_dish_id": "uuid", "hint": "もっとさっぱり" }
+
+// Response 200
+{ "meal_plan_id": "uuid", "status": "proposed", "dishes": ["鶏肉とれんこんの甘酢炒め"] }
 ```
+
+| ステータス | 意味 |
+|---|---|
+| 400 / 401 / 404 | 不正な ID / 未ログイン / 見つからない |
+| 409 `NOT_CHANGEABLE` | 計画が `proposed` / `confirmed` 以外(生成中など) |
+| 422 `NO_DINNER` / `REGENERATE_FAILED` | 献立なしの日 / 検証を通る案を作れなかった(メッセージに理由) |
+
+- `proposed` と `confirmed` の計画で使える。`confirmed` の場合、クライアントは続けて買い物リストを作り直す(チェックは残る)
+- お気に入りからの差し替えは LLM を使わないので `swap_planned_dish` RPC で直接行う
+
 
 エラー形式(共通):
 
@@ -374,11 +388,25 @@ Claude の structured outputs(`output_config.format`)で、スキーマに適合
 | 期間内で同じ料理 / 直近14日と同じ料理 | ① | 警告 |
 | 生の魚介・ひき肉を期間の4日目以降に使う | ② | 警告 |
 
-### 5.4 時間とコストの制約
+### 5.4 日・品ごとの再提案
+
+実装: `supabase/functions/_shared/plan/regenerate.ts`、保存は `replace_planned_dishes` RPC。
+
+1. 計画全体の今の献立(料理名・主な食材)を読み、作り直す日・品以外は固定の文脈としてモデルに渡す
+2. 骨組み(`DISHES_OUTLINE_SCHEMA`): 1品なら代わりの1品、日ごとならその日の全品。ヒント(`hint`)を最優先
+3. 検証: 新しい品を入れたその日を、計画全体と同じルール(5.3)で検証し、その日と新しい品に関する指摘だけを使う。加えて
+   - 1品の作り直しで、通常の日は区分を変えない(`COURSE_MISMATCH`)
+   - 作り直す前と同じ料理は不可(`SAME_AS_BEFORE`)
+   - 時短の日の時間上限は、残す品の時間も含めて判定する
+4. 新しい品だけ材料と手順を作り、調味料まで含めて制限食材を確認する
+5. その日の警告を新しいものに置き換えて保存。置き換えた LLM のレシピは、お気に入り・評価がなければ削除する
+6. 余り物は「まだどの計画にも使っていないもの」だけを渡す(期間全体で使い切る判定はしない)
+
+### 5.5 時間とコストの制約
 
 - Supabase 無料枠の Edge Function は wall clock 150 秒。一括生成では最大 66 秒かかったため2段階に分けた
 - 生成が途中で止まった場合に備え、`generating` のまま 3 分以上たった計画は再度 claim できる
-- 1回の生成コストは Sonnet 5.5 で約 $0.08(月6回で約70円)
+- 1回の生成コストは Sonnet 5.5 で約 $0.08(月6回で約70円)。再提案は1日分・1品分だけなので、これより小さい
 
 ## 6. 買い物リスト生成
 

@@ -235,11 +235,11 @@ export async function generateTwoStage(
 // Shared retry loop
 
 /** Structured outputs guarantee the shape, but a malformed reply must never crash validation. */
-const MALFORMED: Issue = { code: "DETAIL_MISMATCH", message: "出力の形がスキーマと一致しません" };
+export const MALFORMED: Issue = { code: "DETAIL_MISMATCH", message: "出力の形がスキーマと一致しません" };
 
 // ---------------------------------------------------------------------------
 
-interface RetryLoopArgs<T> {
+export interface RetryLoopArgs<T> {
   stage: string;
   effort: Effort;
   system: string;
@@ -252,7 +252,7 @@ interface RetryLoopArgs<T> {
   check: (value: T) => Issue[];
 }
 
-async function retryLoop<T>(args: RetryLoopArgs<T>): Promise<{
+export async function retryLoop<T>(args: RetryLoopArgs<T>): Promise<{
   value: T | null;
   last: T | null;
   attempts: Attempt[];

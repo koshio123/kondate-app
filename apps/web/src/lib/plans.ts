@@ -199,13 +199,57 @@ export function useConfirmPlan() {
   });
 }
 
+/**
+ * Re-suggests one day (dishId omitted) or one dish. The Edge Function saves the new dishes
+ * before answering, so the request takes 20-40 seconds.
+ */
+export function useRegenerate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { planId: string; dayId: string; dishId?: string; hint?: string }) => {
+      const { error } = await supabase.functions.invoke("regenerate", {
+        body: {
+          meal_plan_day_id: args.dayId,
+          planned_dish_id: args.dishId,
+          hint: args.hint?.trim() || undefined,
+        },
+      });
+      if (error) throw new Error(await functionErrorMessage(error, REGENERATE_FALLBACK));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["plan"] }),
+  });
+}
+
+const REGENERATE_FALLBACK = "新しい案を作れませんでした。電波の良い場所でもう一度お試しください。";
+
+/** Puts a favourite recipe in place of a dish. */
+export function useSwapDish() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { dishId: string; recipeId: string }) => {
+      const { error } = await supabase.rpc("swap_planned_dish", {
+        p_dish_id: args.dishId,
+        p_recipe_id: args.recipeId,
+      });
+      if (error) throw error;
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["favorites"] });
+    },
+  });
+}
+
 /** The Edge Function answers errors as { error: { code, message } }; show its message. */
-async function functionErrorMessage(error: unknown): Promise<string> {
+async function functionErrorMessage(
+  error: unknown,
+  fallback = "献立の作成を始められませんでした。電波の良い場所でもう一度お試しください。",
+): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     const body = await (error.context as Response).json().catch(() => null);
     if (body?.error?.message) return body.error.message as string;
   }
-  return "献立の作成を始められませんでした。電波の良い場所でもう一度お試しください。";
+  return fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +349,7 @@ export function useUpdateRecipe(recipeId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["recipe", recipeId] });
       void queryClient.invalidateQueries({ queryKey: ["plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["favorites"] });
     },
   });
 }

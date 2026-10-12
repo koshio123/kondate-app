@@ -85,7 +85,13 @@ function PlanEditForm({ plan }: { plan: Plan | null }) {
             <span aria-hidden="true" className="text-muted">
               〜
             </span>
-            <DateField label="終了日" value={end} min={start} onChange={(v) => v && setEnd(v)} />
+            <DateField
+              label="終了日"
+              value={end}
+              min={start}
+              max={addDays(start, MAX_DAYS - 1)}
+              onChange={(v) => v && setEnd(v)}
+            />
           </div>
           <p
             className={`text-xs ${rangeError ? "font-bold text-danger" : "text-muted"}`}
@@ -165,25 +171,49 @@ function DateField({
   label,
   value,
   min,
+  max,
   onChange,
 }: {
   label: string;
   value: string;
   min?: string;
+  max?: string;
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="relative flex h-[52px] flex-1 flex-col justify-center rounded-2xl border border-line bg-surface px-3.5">
+    <label className="relative flex h-[52px] flex-1 flex-col justify-center rounded-2xl border border-line bg-surface px-3.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-soft">
       <span className="text-[11px] text-muted">{label}</span>
       <span className="text-base font-bold">{formatIsoShort(value)}</span>
-      {/* The native date picker sits on top, invisible, so tapping anywhere opens it. */}
+      {/*
+        The native date input sits on top, invisible, so the field shows "10/13(火)" while the
+        browser's own picker does the editing. Phones open the picker on any tap, but desktop
+        browsers only open it from the small calendar icon, so open it explicitly.
+      */}
       <input
         type="date"
+        aria-label={label}
         value={value}
         min={min}
+        max={max}
+        required
         onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => openPicker(e.currentTarget)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openPicker(e.currentTarget);
+          }
+        }}
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
     </label>
   );
+}
+
+function openPicker(input: HTMLInputElement) {
+  try {
+    input.showPicker();
+  } catch {
+    // Older browsers (or a call without a user gesture): focusing the field still allows typing.
+  }
 }

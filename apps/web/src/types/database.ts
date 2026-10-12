@@ -660,8 +660,23 @@ export type Database = {
     };
     Functions: {
       claim_plan_generation: { Args: { p_plan_id: string }; Returns: boolean };
+      delete_unkept_recipes: { Args: { p_recipe_ids: string[] }; Returns: undefined };
       fail_plan_generation: { Args: { p_error: string; p_plan_id: string }; Returns: undefined };
+      insert_generated_recipe: {
+        Args: { p_dish: Json; p_household: string; p_servings: number };
+        Returns: string;
+      };
       my_household_id: { Args: Record<PropertyKey, never>; Returns: string };
+      replace_planned_dishes: {
+        Args: {
+          p_day_id: string;
+          p_dish_id: string;
+          p_dishes: Json;
+          p_servings: number;
+          p_warnings: Json;
+        };
+        Returns: undefined;
+      };
       replace_shopping_list: { Args: { p_items: Json; p_plan_id: string }; Returns: string };
       save_generated_plan: {
         Args: { p_days: Json; p_meta: Json; p_plan_id: string };
@@ -671,6 +686,7 @@ export type Database = {
         Args: { p_days: Json; p_end: string; p_plan_id: string; p_start: string };
         Returns: string;
       };
+      swap_planned_dish: { Args: { p_dish_id: string; p_recipe_id: string }; Returns: undefined };
     };
     Enums: {
       [_ in never]: never;

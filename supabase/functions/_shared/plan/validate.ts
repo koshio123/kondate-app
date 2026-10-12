@@ -26,7 +26,10 @@ export type IssueCode =
   | "REPEATS_RECENT"
   | "PERISHABLE_LATE"
   // stage 2 (per-day details) only
-  | "DETAIL_MISMATCH";
+  | "DETAIL_MISMATCH"
+  // re-suggesting one day or dish
+  | "COURSE_MISMATCH"
+  | "SAME_AS_BEFORE";
 
 export interface Issue {
   code: IssueCode;
@@ -295,7 +298,7 @@ export function mergeOutline(outline: PlanOutline, details: Map<string, DayDetai
   };
 }
 
-function outlineAsPlan(outline: PlanOutline): GeneratedPlan {
+export function outlineAsPlan(outline: PlanOutline): GeneratedPlan {
   return {
     days: outline.days.map((day) => ({
       date: day.date,
