@@ -1,10 +1,30 @@
-import { buildPlanPrompt, buildRetryMessage } from "./prompt.ts";
-import type { GeneratedPlan, PlanInput } from "./types.ts";
-import { validatePlan, type ValidationResult } from "./validate.ts";
+import {
+  buildDayDetailPrompt,
+  buildOutlinePrompt,
+  buildPlanPrompt,
+  buildRetryMessage,
+} from "./prompt.ts";
+import { DAY_DETAIL_SCHEMA, OUTLINE_SCHEMA, PLAN_OUTPUT_SCHEMA } from "./schema.ts";
+import type { DayDetail, GeneratedPlan, PlanInput, PlanOutline } from "./types.ts";
+import {
+  type Issue,
+  mergeOutline,
+  validateDayDetail,
+  validateOutline,
+  validatePlan,
+  type ValidationResult,
+} from "./validate.ts";
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface ModelRequest {
+  system: string;
+  messages: ChatMessage[];
+  /** JSON schema for structured output. */
+  schema: Record<string, unknown>;
 }
 
 export interface ModelReply {
@@ -15,73 +35,247 @@ export interface ModelReply {
   stopReason: string | null;
 }
 
-/** Calls the model with the plan schema as structured output. Injected so it can be mocked. */
-export type CallModel = (system: string, messages: ChatMessage[]) => Promise<ModelReply>;
+/** Calls the model with a structured-output schema. Injected so it can be mocked. */
+export type CallModel = (request: ModelRequest) => Promise<ModelReply>;
+
+export type Strategy = "one-shot" | "two-stage";
 
 export interface Attempt {
+  /** "plan" (one-shot), "outline", or "detail:<date>" */
+  stage: string;
   reply: ModelReply;
   elapsedMs: number;
-  plan: GeneratedPlan | null;
   /** Set when the reply could not be used (truncated, refused, not JSON). */
   error: string | null;
-  validation: ValidationResult | null;
+  violations: Issue[];
 }
 
 export interface GenerationResult {
+  strategy: Strategy;
   attempts: Attempt[];
-  /** The first plan without violations, or null if every attempt failed. */
+  /** Attempts beyond the minimum needed (one per stage call). */
+  retries: number;
+  /** Wall-clock time of the whole generation. */
+  totalMs: number;
+  /** The final plan without violations, or null if generation failed. */
   plan: GeneratedPlan | null;
+  /** Last plan produced even if it still had violations (for reports and debugging). */
+  lastPlan: GeneratedPlan | null;
   validation: ValidationResult | null;
+  /** Human-readable reason when plan is null. */
+  failure: string | null;
 }
 
-/**
- * Generates a plan and regenerates (up to `maxRetries` times) while hard rules are broken,
- * telling the model what was wrong. Mirrors docs/02_design.md "5. 献立生成の処理".
- */
-export async function generatePlanWithRetries(
+export interface GenerateOptions {
+  /** Retries after the first attempt, per stage call. */
+  maxRetries?: number;
+  now?: () => number;
+}
+
+export function generatePlan(
+  strategy: Strategy,
   input: PlanInput,
   callModel: CallModel,
-  options: { maxRetries?: number; now?: () => number } = {},
+  options: GenerateOptions = {},
 ): Promise<GenerationResult> {
-  const maxRetries = options.maxRetries ?? 2;
+  return strategy === "two-stage"
+    ? generateTwoStage(input, callModel, options)
+    : generateOneShot(input, callModel, options);
+}
+
+// ---------------------------------------------------------------------------
+// One-shot: all days with ingredients and steps in a single structured reply
+// ---------------------------------------------------------------------------
+
+export async function generateOneShot(
+  input: PlanInput,
+  callModel: CallModel,
+  options: GenerateOptions = {},
+): Promise<GenerationResult> {
   const now = options.now ?? Date.now;
+  const started = now();
   const { system, user } = buildPlanPrompt(input);
-  const messages: ChatMessage[] = [{ role: "user", content: user }];
+  let validation: ValidationResult | null = null;
+
+  const loop = await retryLoop<GeneratedPlan>({
+    stage: "plan",
+    system,
+    user,
+    schema: PLAN_OUTPUT_SCHEMA,
+    callModel,
+    maxRetries: options.maxRetries ?? 2,
+    now,
+    check: (plan) => {
+      if (!Array.isArray(plan.days)) return [MALFORMED];
+      validation = validatePlan(input, plan);
+      return validation.violations;
+    },
+  });
+
+  return {
+    strategy: "one-shot",
+    attempts: loop.attempts,
+    retries: loop.attempts.length - 1,
+    totalMs: now() - started,
+    plan: loop.value,
+    lastPlan: loop.last,
+    validation,
+    failure: loop.value ? null : loop.failure,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Two-stage: outline for all days, then details per day in parallel
+// ---------------------------------------------------------------------------
+
+export async function generateTwoStage(
+  input: PlanInput,
+  callModel: CallModel,
+  options: GenerateOptions = {},
+): Promise<GenerationResult> {
+  const now = options.now ?? Date.now;
+  const maxRetries = options.maxRetries ?? 2;
+  const started = now();
   const attempts: Attempt[] = [];
 
-  for (let i = 0; i <= maxRetries; i++) {
-    const started = now();
-    const reply = await callModel(system, messages);
-    const elapsedMs = now() - started;
+  // Stage 1
+  const outlinePrompt = buildOutlinePrompt(input);
+  const outlineLoop = await retryLoop<PlanOutline>({
+    stage: "outline",
+    system: outlinePrompt.system,
+    user: outlinePrompt.user,
+    schema: OUTLINE_SCHEMA,
+    callModel,
+    maxRetries,
+    now,
+    check: (outline) =>
+      Array.isArray(outline.days) ? validateOutline(input, outline).violations : [MALFORMED],
+  });
+  attempts.push(...outlineLoop.attempts);
+  const outline = outlineLoop.value;
+  if (!outline) {
+    return {
+      strategy: "two-stage",
+      attempts,
+      retries: attempts.length - 1,
+      totalMs: now() - started,
+      plan: null,
+      lastPlan: null,
+      validation: null,
+      failure: `献立の骨組みを作れませんでした: ${outlineLoop.failure}`,
+    };
+  }
 
-    const parsed = parseReply(reply);
+  // Stage 2 (parallel)
+  const detailLoops = await Promise.all(
+    outline.days.map(async (day) => {
+      const prompt = buildDayDetailPrompt(input, day);
+      const loop = await retryLoop<DayDetail>({
+        stage: `detail:${day.date}`,
+        system: prompt.system,
+        user: prompt.user,
+        schema: DAY_DETAIL_SCHEMA,
+        callModel,
+        maxRetries: Math.min(1, maxRetries),
+        now,
+        check: (detail) =>
+          Array.isArray(detail.dishes) ? validateDayDetail(input, day, detail) : [MALFORMED],
+      });
+      return { date: day.date, loop };
+    }),
+  );
+
+  const details = new Map<string, DayDetail>();
+  const failures: string[] = [];
+  for (const { date, loop } of detailLoops) {
+    attempts.push(...loop.attempts);
+    if (loop.value) details.set(date, loop.value);
+    else failures.push(`${date}: ${loop.failure}`);
+  }
+
+  const merged = mergeOutline(outline, details);
+  const validation = validatePlan(input, merged);
+  const ok = failures.length === 0 && validation.violations.length === 0;
+  return {
+    strategy: "two-stage",
+    attempts,
+    retries: attempts.length - (1 + outline.days.length),
+    totalMs: now() - started,
+    plan: ok ? merged : null,
+    lastPlan: merged,
+    validation,
+    failure: ok
+      ? null
+      : failures.length > 0
+        ? `材料と手順を作れなかった日があります(${failures.join(" / ")})`
+        : validation.violations.map((v) => v.message).join(" / "),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared retry loop
+
+/** Structured outputs guarantee the shape, but a malformed reply must never crash validation. */
+const MALFORMED: Issue = { code: "DETAIL_MISMATCH", message: "出力の形がスキーマと一致しません" };
+
+// ---------------------------------------------------------------------------
+
+interface RetryLoopArgs<T> {
+  stage: string;
+  system: string;
+  user: string;
+  schema: Record<string, unknown>;
+  callModel: CallModel;
+  maxRetries: number;
+  now: () => number;
+  /** Returns hard-rule violations; an empty list accepts the value. */
+  check: (value: T) => Issue[];
+}
+
+async function retryLoop<T>(args: RetryLoopArgs<T>): Promise<{
+  value: T | null;
+  last: T | null;
+  attempts: Attempt[];
+  failure: string;
+}> {
+  const messages: ChatMessage[] = [{ role: "user", content: args.user }];
+  const attempts: Attempt[] = [];
+  let last: T | null = null;
+  let failure = "";
+
+  for (let i = 0; i <= args.maxRetries; i++) {
+    const started = args.now();
+    const reply = await args.callModel({ system: args.system, messages, schema: args.schema });
+    const elapsedMs = args.now() - started;
+
+    const parsed = parseReply<T>(reply);
     if (parsed.error !== null) {
-      attempts.push({ reply, elapsedMs, plan: null, error: parsed.error, validation: null });
+      attempts.push({ stage: args.stage, reply, elapsedMs, error: parsed.error, violations: [] });
+      failure = parsed.error;
       // A truncated or refused reply is not something a corrective message can fix reliably.
       break;
     }
 
-    const validation = validatePlan(input, parsed.plan);
-    attempts.push({ reply, elapsedMs, plan: parsed.plan, error: null, validation });
-    if (validation.violations.length === 0) {
-      return { attempts, plan: parsed.plan, validation };
-    }
-    messages.push({ role: "assistant", content: reply.text });
-    messages.push({ role: "user", content: buildRetryMessage(validation.violations) });
-  }
+    last = parsed.value;
+    const violations = args.check(parsed.value);
+    attempts.push({ stage: args.stage, reply, elapsedMs, error: null, violations });
+    if (violations.length === 0) return { value: parsed.value, last, attempts, failure: "" };
 
-  const last = attempts.at(-1);
-  return { attempts, plan: null, validation: last?.validation ?? null };
+    failure = violations.map((v) => v.message).join(" / ");
+    messages.push({ role: "assistant", content: reply.text });
+    messages.push({ role: "user", content: buildRetryMessage(violations) });
+  }
+  return { value: null, last, attempts, failure };
 }
 
-function parseReply(reply: ModelReply): { plan: GeneratedPlan; error: null } | { plan: null; error: string } {
-  if (reply.stopReason === "max_tokens") return { plan: null, error: "出力が途中で切れました(max_tokens)" };
-  if (reply.stopReason === "refusal") return { plan: null, error: "モデルが応答を拒否しました" };
+function parseReply<T>(reply: ModelReply): { value: T; error: null } | { value: null; error: string } {
+  if (reply.stopReason === "max_tokens") return { value: null, error: "出力が途中で切れました(max_tokens)" };
+  if (reply.stopReason === "refusal") return { value: null, error: "モデルが応答を拒否しました" };
   try {
-    const plan = JSON.parse(reply.text) as GeneratedPlan;
-    if (!plan || !Array.isArray(plan.days)) return { plan: null, error: "days がありません" };
-    return { plan, error: null };
+    const value = JSON.parse(reply.text) as T;
+    if (value === null || typeof value !== "object") return { value: null, error: "JSON の形が不正です" };
+    return { value, error: null };
   } catch {
-    return { plan: null, error: "JSON として読めませんでした" };
+    return { value: null, error: "JSON として読めませんでした" };
   }
 }

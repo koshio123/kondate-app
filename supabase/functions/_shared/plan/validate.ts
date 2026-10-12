@@ -1,5 +1,12 @@
 import { containsAnyTerm, normalizeFoodName, restrictionTerms } from "./normalize.ts";
-import type { GeneratedDish, GeneratedPlan, PlanInput } from "./types.ts";
+import type {
+  DayDetail,
+  GeneratedDish,
+  GeneratedPlan,
+  OutlineDay,
+  PlanInput,
+  PlanOutline,
+} from "./types.ts";
 
 export type IssueCode =
   // violations: the plan must be regenerated
@@ -16,7 +23,10 @@ export type IssueCode =
   | "LEFTOVER_UNUSED"
   | "LEFTOVER_LATE"
   | "DUPLICATE_TITLE"
-  | "REPEATS_RECENT";
+  | "REPEATS_RECENT"
+  | "PERISHABLE_LATE"
+  // stage 2 (per-day details) only
+  | "DETAIL_MISMATCH";
 
 export interface Issue {
   code: IssueCode;
@@ -184,6 +194,29 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
     }
   }
 
+  // --- perishables ------------------------------------------------------
+  const start = [...input.days.map((d) => d.date)].sort()[0];
+  if (start) {
+    for (const day of plan.days) {
+      const dayIndex = daysBetween(start, day.date);
+      if (dayIndex < PERISHABLE_LAST_DAY_INDEX + 1) continue;
+      for (const dish of day.dishes) {
+        const hits = dish.ingredients
+          .filter((i) => !i.is_pantry)
+          .map((i) => i.name)
+          .filter((name) => isPerishable(name));
+        if (hits.length > 0) {
+          warnings.push({
+            code: "PERISHABLE_LATE",
+            date: day.date,
+            dish: dish.title,
+            message: `${day.date}「${dish.title}」の${hits.join("、")}は傷みやすく、期間の${dayIndex + 1}日目です`,
+          });
+        }
+      }
+    }
+  }
+
   const mains = plan.days.flatMap((day) =>
     day.dishes.filter((d) => d.course === "main" || d.course === "one_dish").map((d) => d.title),
   );
@@ -198,6 +231,110 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
       distinctMainTitles: new Set(mains).size,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Two-stage helpers
+// ---------------------------------------------------------------------------
+
+/** Stage 1 check: the outline is validated as a plan whose ingredients are the main ingredients. */
+export function validateOutline(input: PlanInput, outline: PlanOutline): ValidationResult {
+  return validatePlan(input, outlineAsPlan(outline));
+}
+
+/**
+ * Stage 2 check for one day: the dishes must match the outline (same count and order) and
+ * the full ingredient lists, seasonings included, must respect allergy/never restrictions.
+ */
+export function validateDayDetail(input: PlanInput, day: OutlineDay, detail: DayDetail): Issue[] {
+  const issues: Issue[] = [];
+  if (detail.dishes.length !== day.dishes.length) {
+    issues.push({
+      code: "DETAIL_MISMATCH",
+      date: day.date,
+      message: `料理は ${day.dishes.length} 品のはずが ${detail.dishes.length} 品です(${day.dishes.map((d) => d.title).join("、")})`,
+    });
+    return issues;
+  }
+  for (const restriction of input.restrictions) {
+    if (restriction.kind === "avoid") continue;
+    const terms = restrictionTerms(restriction);
+    detail.dishes.forEach((dish, i) => {
+      const title = day.dishes[i]?.title ?? dish.title;
+      const hits = dish.ingredients.map((x) => x.name).filter((name) => containsAnyTerm(name, terms));
+      if (hits.length > 0) {
+        issues.push({
+          code: "RESTRICTED_INGREDIENT",
+          date: day.date,
+          dish: title,
+          message: `使えない食材「${restriction.label}」が「${title}」(${hits.join("、")})に入っています`,
+        });
+      }
+    });
+  }
+  return issues;
+}
+
+/** Combines the outline with per-day details into a full plan (outline titles win). */
+export function mergeOutline(outline: PlanOutline, details: Map<string, DayDetail>): GeneratedPlan {
+  return {
+    days: outline.days.map((day) => {
+      const detail = details.get(day.date);
+      return {
+        date: day.date,
+        dishes: day.dishes.map((dish, i) => ({
+          title: dish.title,
+          course: dish.course,
+          cook_minutes: dish.cook_minutes,
+          ingredients: detail?.dishes[i]?.ingredients ?? [],
+          steps: detail?.dishes[i]?.steps ?? [],
+          uses_leftovers: dish.uses_leftovers,
+        })),
+      };
+    }),
+  };
+}
+
+function outlineAsPlan(outline: PlanOutline): GeneratedPlan {
+  return {
+    days: outline.days.map((day) => ({
+      date: day.date,
+      dishes: day.dishes.map((dish) => ({
+        title: dish.title,
+        course: dish.course,
+        cook_minutes: dish.cook_minutes,
+        ingredients: dish.main_ingredients.map((name) => ({ name, amount: null, unit: "", is_pantry: false })),
+        steps: [],
+        uses_leftovers: dish.uses_leftovers,
+      })),
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Perishables
+// ---------------------------------------------------------------------------
+
+/** Raw seafood and minced meat should be eaten within the first 3 days after shopping. */
+const PERISHABLE_LAST_DAY_INDEX = 2;
+
+const PERISHABLE_TERMS = [
+  "鮭", "さけ", "サーモン", "鯖", "さば", "鰤", "ぶり", "鱈", "たら", "鯵", "あじ", "鰯", "いわし",
+  "秋刀魚", "さんま", "かじき", "鮪", "まぐろ", "鯛", "かれい", "ほっけ", "刺身", "えび", "海老",
+  "いか", "たこ", "あさり", "しじみ", "ほたて", "牡蠣", "ひき肉", "挽き肉", "ミンチ",
+].map(normalizeFoodName);
+
+/** Canned, frozen, dried or salted-and-processed forms keep; fresh ones do not. */
+const KEEPS_TERMS = ["缶", "冷凍", "干し", "乾燥", "フレーク", "ツナ", "かにかま", "ちくわ", "桜えび"].map(normalizeFoodName);
+
+function isPerishable(name: string): boolean {
+  const n = normalizeFoodName(name);
+  if (KEEPS_TERMS.some((t) => n.includes(t))) return false;
+  return PERISHABLE_TERMS.some((t) => n.includes(t));
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
 const COURSE_LABELS = { staple: "主食", main: "主菜", side: "副菜", soup: "汁物" } as const;

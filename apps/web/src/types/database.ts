@@ -263,8 +263,12 @@ export type Database = {
         Row: {
           created_at: string;
           end_date: string;
+          generation_error: string | null;
+          generation_meta: Json | null;
+          generation_started_at: string | null;
           household_id: string;
           id: string;
+          request: string;
           start_date: string;
           status: string;
           updated_at: string;
@@ -273,8 +277,12 @@ export type Database = {
         Insert: {
           created_at?: string;
           end_date: string;
+          generation_error?: string | null;
+          generation_meta?: Json | null;
+          generation_started_at?: string | null;
           household_id: string;
           id?: string;
+          request?: string;
           start_date: string;
           status?: string;
           updated_at?: string;
@@ -282,8 +290,12 @@ export type Database = {
         Update: {
           created_at?: string;
           end_date?: string;
+          generation_error?: string | null;
+          generation_meta?: Json | null;
+          generation_started_at?: string | null;
           household_id?: string;
           id?: string;
+          request?: string;
           start_date?: string;
           status?: string;
           updated_at?: string;
@@ -644,7 +656,13 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_plan_generation: { Args: { p_plan_id: string }; Returns: boolean };
+      fail_plan_generation: { Args: { p_error: string; p_plan_id: string }; Returns: undefined };
       my_household_id: { Args: Record<PropertyKey, never>; Returns: string };
+      save_generated_plan: {
+        Args: { p_days: Json; p_meta: Json; p_plan_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

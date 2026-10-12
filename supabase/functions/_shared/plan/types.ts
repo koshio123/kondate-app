@@ -62,3 +62,35 @@ export interface GeneratedDay {
 export interface GeneratedPlan {
   days: GeneratedDay[];
 }
+
+// --- two-stage generation ---------------------------------------------------
+// Stage 1 decides every day's dishes at once (cheap, fast, keeps cross-day rules);
+// stage 2 fills in ingredients and steps for each day in parallel.
+
+export interface OutlineDish {
+  title: string;
+  course: Course;
+  cook_minutes: number;
+  /** Main ingredients only (3-5), no seasonings. Used for restriction and leftover checks. */
+  main_ingredients: string[];
+  uses_leftovers: string[];
+}
+
+export interface OutlineDay {
+  date: string;
+  dishes: OutlineDish[];
+}
+
+export interface PlanOutline {
+  days: OutlineDay[];
+}
+
+export interface DishDetail {
+  title: string;
+  ingredients: GeneratedIngredient[];
+  steps: string[];
+}
+
+export interface DayDetail {
+  dishes: DishDetail[];
+}

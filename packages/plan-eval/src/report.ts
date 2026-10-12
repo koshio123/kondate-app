@@ -21,32 +21,35 @@ const COURSE_LABEL: Record<Course, string> = {
 /** Plans a month: about 6 plans (one every 5 days). */
 const PLANS_PER_MONTH = 6;
 
-export function summarize(records: RunRecord[]) {
-  const byModel = new Map<string, RunRecord[]>();
-  for (const r of records) byModel.set(r.model.key, [...(byModel.get(r.model.key) ?? []), r]);
+/** Edge Function wall-clock limit on the Supabase free plan. */
+const WALL_CLOCK_LIMIT_SEC = 150;
 
-  return [...byModel.values()].map((runs) => {
+export function summarize(records: RunRecord[]) {
+  const groups = new Map<string, RunRecord[]>();
+  for (const r of records) {
+    const key = `${r.model.key}/${r.result.strategy}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+
+  return [...groups.values()].map((runs) => {
     const model = runs[0]!.model;
     const attempts = runs.flatMap((r) => r.result.attempts);
     const inputTokens = attempts.reduce((n, a) => n + a.reply.inputTokens, 0);
     const outputTokens = attempts.reduce((n, a) => n + a.reply.outputTokens, 0);
-    const firstTryOk = runs.filter(
-      (r) => r.result.attempts[0]?.validation?.violations.length === 0,
-    ).length;
-    const finalOk = runs.filter((r) => r.result.plan !== null).length;
-    const warnings = runs.reduce((n, r) => n + (r.result.validation?.warnings.length ?? 0), 0);
-    const leftoverRates = runs.map((r) => r.result.validation?.metrics.leftoverUsageRate ?? 0);
-    const firstAttemptMs = runs.map((r) => r.result.attempts[0]?.elapsedMs ?? 0);
+    const totals = runs.map((r) => r.result.totalMs / 1000);
     const costPerRun = costUsd(model, inputTokens, outputTokens) / runs.length;
     return {
       model,
+      strategy: runs[0]!.result.strategy,
       runs: runs.length,
-      firstTryOk,
-      finalOk,
-      avgAttempts: attempts.length / runs.length,
-      avgWarnings: warnings / runs.length,
-      avgLeftoverUsage: average(leftoverRates),
-      avgFirstAttemptSec: average(firstAttemptMs) / 1000,
+      noRetry: runs.filter((r) => r.result.plan !== null && r.result.retries === 0).length,
+      finalOk: runs.filter((r) => r.result.plan !== null).length,
+      avgWarnings: average(runs.map((r) => r.result.validation?.warnings.length ?? 0)),
+      avgLeftoverUsage: average(
+        runs.map((r) => r.result.validation?.metrics.leftoverUsageRate ?? 0),
+      ),
+      avgTotalSec: average(totals),
+      maxTotalSec: Math.max(...totals),
       avgInputTokens: inputTokens / runs.length,
       avgOutputTokens: outputTokens / runs.length,
       costPerRunUsd: costPerRun,
@@ -66,29 +69,31 @@ export function renderReport(
 
   lines.push("## 集計", "");
   lines.push(
-    "| モデル | 実行数 | 1回目で合格 | 最終合格 | 平均試行 | 平均警告 | 余り物使用率 | 1回目の応答(秒) | 入力tok | 出力tok | 1回あたり | 月額目安(6回) |",
+    "| モデル | 方式 | 実行数 | 再生成なしで合格 | 最終合格 | 平均警告 | 余り物使用率 | 所要時間 平均/最大(秒) | 入力tok | 出力tok | 1回あたり | 月額目安(6回) |",
     "|---|---|---|---|---|---|---|---|---|---|---|---|",
   );
   for (const s of summarize(records)) {
+    const over = s.maxTotalSec > WALL_CLOCK_LIMIT_SEC ? " ⚠" : "";
     lines.push(
-      `| ${s.model.label} | ${s.runs} | ${s.firstTryOk}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgAttempts.toFixed(1)} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.avgFirstAttemptSec.toFixed(1)} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
+      `| ${s.model.label} | ${s.strategy} | ${s.runs} | ${s.noRetry}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.avgTotalSec.toFixed(1)} / ${s.maxTotalSec.toFixed(1)}${over} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
     );
   }
-  lines.push("", `為替は 1 USD = ${JPY_PER_USD} 円で概算。`, "");
+  lines.push(
+    "",
+    `為替は 1 USD = ${JPY_PER_USD} 円で概算。⚠ は Edge Function の上限(${WALL_CLOCK_LIMIT_SEC} 秒)超え。`,
+    "",
+  );
 
   lines.push("## 献立(味・バランスの目視確認用)", "");
   for (const r of records) {
-    lines.push(
-      `### ${r.scenario.title} / ${r.model.label}${r.repeat > 1 ? ` (#${r.repeat})` : ""}`,
-      "",
-    );
-    const last = r.result.attempts.at(-1);
-    const plan = r.result.plan ?? last?.plan ?? null;
+    const repeat = r.repeat > 1 ? ` (#${r.repeat})` : "";
+    lines.push(`### ${r.scenario.title} / ${r.model.label} / ${r.result.strategy}${repeat}`, "");
+    const plan = r.result.plan ?? r.result.lastPlan;
     if (!plan) {
-      lines.push(`生成失敗: ${last?.error ?? "不明"}`, "");
+      lines.push(`生成失敗: ${r.result.failure ?? "不明"}`, "");
       continue;
     }
-    if (!r.result.plan) lines.push("**ルール違反が解消されなかった最後の案**", "");
+    if (!r.result.plan) lines.push(`**合格しなかった最後の案**(${r.result.failure ?? ""})`, "");
     const modes = new Map(r.scenario.input.days.map((d) => [d.date, d.mode]));
     lines.push("| 日付 | モード | 料理 | 合計(分) |", "|---|---|---|---|");
     for (const day of plan.days) {
@@ -102,8 +107,8 @@ export function renderReport(
       lines.push(`| ${day.date} | ${modes.get(day.date) ?? "?"} | ${dishes} | ${total} |`);
     }
     const issues = [
-      ...r.result.attempts.flatMap((a, i) =>
-        (a.validation?.violations ?? []).map((v) => `- 違反(${i + 1}回目): ${v.message}`),
+      ...r.result.attempts.flatMap((a) =>
+        a.violations.map((v) => `- 違反(${a.stage}): ${v.message}`),
       ),
       ...(r.result.validation?.warnings ?? []).map((w) => `- 警告: ${w.message}`),
     ];

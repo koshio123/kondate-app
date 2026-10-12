@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| バージョン | v0.2 |
+| バージョン | v0.3 |
 | 作成日 | 2026-10-12 |
 | 前提 | [01_requirements.md](01_requirements.md) v0.3 |
 | フェーズ | ③ 設計 |
@@ -188,6 +188,8 @@ erDiagram
 | meal_plans | household_id | uuid FK | |
 | | start_date / end_date | date | CHECK: 期間は最大10日 |
 | | status | text | `draft` / `generating` / `proposed` / `confirmed` / `archived` |
+| | request | text | S3 のリクエスト(自由入力) |
+| | generation_started_at / generation_error / generation_meta | timestamptz / text / jsonb | 生成の開始時刻、失敗理由、モデル・トークン数・警告 |
 | meal_plan_days | meal_plan_id | uuid FK | |
 | | date | date | UNIQUE(meal_plan_id, date, meal_type) |
 | | meal_type | text | 当面は `dinner` のみ |
@@ -266,32 +268,25 @@ create policy "household access" on meal_plan_days
 | POST | `/functions/v1/regenerate` | 指定した日または品を再提案 |
 | POST | `/functions/v1/build-shopping-list` | 確定した計画から買い物リストを生成(再生成も同じ) |
 
-**generate-plan**
+**generate-plan**(非同期。生成は 30 秒前後かかるため、受付だけ返してバックグラウンドで実行)
 
 ```jsonc
 // Request
 { "meal_plan_id": "uuid" }
 
-// Response 200
-{
-  "meal_plan_id": "uuid",
-  "status": "proposed",
-  "days": [
-    {
-      "date": "2026-10-13",
-      "mode": "normal",
-      "dishes": [
-        { "recipe_id": "uuid", "course": "main", "title": "鮭のちゃんちゃん焼き", "cook_minutes": 25 },
-        { "recipe_id": "uuid", "course": "side", "title": "ほうれん草のおひたし", "cook_minutes": 10 },
-        { "recipe_id": "uuid", "course": "soup", "title": "豆腐とわかめの味噌汁", "cook_minutes": 10 },
-        { "recipe_id": "uuid", "course": "staple", "title": "ご飯", "cook_minutes": 0 }
-      ]
-    },
-    { "date": "2026-10-14", "mode": "none", "dishes": [] }
-  ],
-  "warnings": []
-}
+// Response 202
+{ "meal_plan_id": "uuid", "status": "generating" }
 ```
+
+| ステータス | 意味 |
+|---|---|
+| 400 / 401 / 404 | 不正な ID / 未ログイン / 見つからない(他の世帯の計画も 404) |
+| 409 `ALREADY_GENERATING` | 生成中、または確定済み |
+| 422 `NO_DAYS` | 献立を作る日がない(全日「なし」) |
+
+クライアントは `meal_plans` の変更を Realtime で購読し、`status` が `proposed` になったら S4 を表示する。
+失敗時は `status = draft` に戻り、`generation_error` に画面表示用のメッセージが入る。
+警告(苦手食材、傷みやすい食材が後半、など)は `generation_meta.warnings` に入る。
 
 **regenerate**
 
@@ -326,96 +321,79 @@ create policy "household access" on meal_plan_days
 
 ## 5. 献立生成の処理
 
+実装: `supabase/functions/_shared/plan/`(Edge Function とモデル比較ツール `packages/plan-eval` で共有)。
+モデル比較の結果と2段階生成にした理由は [04_model_evaluation.md](04_model_evaluation.md)。
+
 ```mermaid
 sequenceDiagram
   participant C as クライアント
   participant F as generate-plan
   participant DB as PostgreSQL
-  participant L as LLM
+  participant L as Claude Sonnet 5.5
 
   C->>F: meal_plan_id
-  F->>DB: 期間・モード・余り物・制限食材・お気に入り・最近の献立を取得
-  F->>DB: status = generating
-  F->>L: プロンプト + JSON スキーマ
-  L-->>F: 献立 JSON
-  F->>F: 検証(スキーマ / 制限食材 / 調理時間 / 品構成)
+  F->>DB: 期間・モード・人数・制限食材・余り物・最近の献立・リクエストを取得
+  F->>DB: claim_plan_generation(status = generating)
+  F-->>C: 202 generating
+  Note over F,L: ここからバックグラウンド(EdgeRuntime.waitUntil)
+  F->>L: ① 骨組み: 全日の料理名・区分・調理時間・主な食材
+  L-->>F: アウトライン
+  F->>F: 検証(日付・品構成・時短・制限食材・余り物)
   alt 違反あり(最大2回)
-    F->>L: 違反内容を添えて再生成
+    F->>L: 違反内容を添えて作り直し
   end
-  F->>F: 食材名の正規化(aliases 照合)
-  F->>DB: recipes / planned_dishes を保存、status = proposed
-  F-->>C: 献立
+  par 日ごとに並列
+    F->>L: ② 材料(分量・単位)と手順
+    L-->>F: 1日分の詳細
+    F->>F: 検証(品数一致・調味料まで含めた制限食材)、違反なら1回だけ作り直し
+  end
+  F->>DB: save_generated_plan(1トランザクションで recipes / planned_dishes 保存、status = proposed)
+  DB-->>C: Realtime で status の変更を通知
 ```
 
 ### 5.1 LLM への入力
 
 | 入力 | 内容 |
 |---|---|
-| 日ごとの枠 | 日付、モード(`none` の日は渡さない) |
+| 日ごとの枠 | 日付とモード(`none` の日も日数を数えるために渡し、出力させない) |
 | 構成ルール | `normal`: 主食+主菜+副菜+汁物 / `quick`: 合計 `quick_mode_max_minutes` 分以内、品数は柔軟 |
-| 余り物 | 食材名・量。期間の前半で使うよう指示 |
-| 制限食材 | `allergy` + `never` は禁止、`avoid` はなるべく避ける |
-| 人数 | members の人数で分量を算出 |
-| 最近の献立 | 直近2週間のタイトル(重複回避) |
-| お気に入り | 候補として数件(F8、第2段階) |
+| 余り物 | `leftovers` のうち未使用のもの。期間の前半で使い切るよう指示 |
+| 制限食材 | 家族全員分をまとめ、同じ食材は厳しい方(allergy > never > avoid)を採用 |
+| 人数 | `members` の人数 |
+| 最近の献立 | 直近14日の料理名(主食を除く) |
+| リクエスト | `meal_plans.request`(S3 の自由入力) |
 
-### 5.2 LLM の出力スキーマ(抜粋)
+主なプロンプトの方針: 生の魚介・ひき肉・葉物は期間の1〜3日目、主菜のたんぱく源と調理法を連続させない、
+米は1人0.5合で常備品扱い、調味料は `is_pantry = true`。
 
-```json
-{
-  "type": "object",
-  "required": ["days"],
-  "properties": {
-    "days": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["date", "dishes"],
-        "properties": {
-          "date": { "type": "string", "format": "date" },
-          "dishes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["title", "course", "cook_minutes", "ingredients", "steps"],
-              "properties": {
-                "title": { "type": "string" },
-                "course": { "enum": ["staple", "main", "side", "soup", "one_dish"] },
-                "cook_minutes": { "type": "integer" },
-                "ingredients": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": ["name", "unit"],
-                    "properties": {
-                      "name": { "type": "string" },
-                      "amount": { "type": ["number", "null"] },
-                      "unit": { "type": "string" },
-                      "is_pantry": { "type": "boolean" }
-                    }
-                  }
-                },
-                "steps": { "type": "array", "items": { "type": "string" } }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
+### 5.2 出力スキーマ
 
-### 5.3 生成後の検証(ロジック)
+Claude の structured outputs(`output_config.format`)で、スキーマに適合した JSON を受け取る。
 
-| チェック | 違反時 |
-|---|---|
-| JSON スキーマに適合 | 再生成 |
-| 食材が `allergy` / `never` に該当(正規名と aliases の両方で照合) | **必ず再生成**。2回失敗したらその日を空にして警告 |
-| `quick` の日の調理時間の合計が上限以下 | 再生成 |
-| `normal` の日に主食・主菜・副菜・汁物がそろっている | 再生成 |
-| 日付が計画期間と一致し、`none` の日を含まない | 再生成 |
-| `avoid` 食材を含む | 許容し、`warnings` に表示 |
+| 段階 | スキーマ | 内容 |
+|---|---|---|
+| ① 骨組み | `OUTLINE_SCHEMA` | `days[].dishes[]`: title / course / cook_minutes / main_ingredients / uses_leftovers |
+| ② 詳細 | `DAY_DETAIL_SCHEMA` | `dishes[]`: title / ingredients(name, amount, unit, is_pantry)/ steps |
+
+### 5.3 検証ルール
+
+| チェック | 段階 | 結果 |
+|---|---|---|
+| 日付が計画と一致し、`none` の日を含まない・重複しない | ① | 違反 → 作り直し |
+| `normal` の日に主食・主菜・副菜・汁物がある(一品料理は主食+主菜を兼ねる) | ① | 違反 → 作り直し |
+| `quick` の日の調理時間の合計が上限以下 | ① | 違反 → 作り直し |
+| `allergy` / `never` の食材(表記ゆれ・アレルゲンの隠れた原材料を含む) | ①② | 違反 → 作り直し |
+| ②の品数が①と一致 | ② | 違反 → 作り直し |
+| `avoid` の食材 | ①② | 警告 |
+| 余り物が使われていない / 期間の後半で初めて使う | ① | 警告 |
+| 期間内で同じ料理 / 直近14日と同じ料理 | ① | 警告 |
+| 生の魚介・ひき肉を期間の4日目以降に使う | ② | 警告 |
+
+### 5.4 時間とコストの制約
+
+- Supabase 無料枠の Edge Function は wall clock 150 秒。一括生成では最大 66 秒かかったため2段階に分けた
+- 生成が途中で止まった場合に備え、`generating` のまま 3 分以上たった計画は再度 claim できる
+- 1回の生成コストは Sonnet 5.5 で約 $0.08(月6回で約70円)
 
 ## 6. 買い物リスト生成
 

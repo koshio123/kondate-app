@@ -45,6 +45,67 @@ const dish = {
   },
 } as const;
 
+const outlineDish = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "course", "cook_minutes", "main_ingredients", "uses_leftovers"],
+  properties: {
+    title: dish.properties.title,
+    course: dish.properties.course,
+    cook_minutes: dish.properties.cook_minutes,
+    main_ingredients: {
+      type: "array",
+      items: { type: "string" },
+      description: "主な食材を3〜5個(調味料は含めない)",
+    },
+    uses_leftovers: dish.properties.uses_leftovers,
+  },
+} as const;
+
+/** Stage 1: every day's dishes without ingredients or steps. */
+export const OUTLINE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["days"],
+  properties: {
+    days: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["date", "dishes"],
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD" },
+          dishes: { type: "array", items: outlineDish },
+        },
+      },
+    },
+  },
+} as const;
+
+/** Stage 2: ingredients and steps for the dishes of one day, in the given order. */
+export const DAY_DETAIL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["dishes"],
+  properties: {
+    dishes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "ingredients", "steps"],
+        properties: {
+          title: dish.properties.title,
+          ingredients: dish.properties.ingredients,
+          steps: dish.properties.steps,
+        },
+      },
+    },
+  },
+} as const;
+
+/** One-shot generation (kept for comparison in packages/plan-eval). */
 export const PLAN_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
