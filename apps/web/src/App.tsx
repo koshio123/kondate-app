@@ -6,10 +6,11 @@ import { DishDetailPage } from "@/routes/DishDetailPage";
 import { HomePage } from "@/routes/HomePage";
 import { LeftoversPage } from "@/routes/LeftoversPage";
 import { LoginPage } from "@/routes/LoginPage";
-import { FavoritesPage, ShoppingPage } from "@/routes/placeholders";
+import { FavoritesPage } from "@/routes/placeholders";
 import { PlanEditPage } from "@/routes/PlanEditPage";
 import { ProposalPage } from "@/routes/ProposalPage";
 import { SettingsPage } from "@/routes/SettingsPage";
+import { ShoppingPage } from "@/routes/ShoppingPage";
 
 /** Routes follow the screen list in docs/02_design.md "2.1 画面一覧". */
 export function App() {

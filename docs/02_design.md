@@ -22,7 +22,7 @@ flowchart LR
     Auth[Auth<br/>Google ログイン]
     DB[(PostgreSQL<br/>+ RLS)]
     RT[Realtime]
-    EF[Edge Functions<br/>generate-plan / regenerate-dish<br/>build-shopping-list]
+    EF[Edge Functions<br/>generate-plan / regenerate]
   end
 
   LLM[LLM API]
@@ -258,7 +258,7 @@ create policy "household access" on meal_plan_days
 | meal_plans, meal_plan_days | `save_plan_draft` RPC で期間と日ごとのモードを1トランザクションで作成・変更。決定(status = confirmed) |
 | leftovers | CRUD |
 | recipes | お気に入り・評価・メモの更新、手動登録 |
-| shopping_items | `checked` の更新、手動追加 |
+| shopping_lists, shopping_items | `replace_shopping_list` RPC でリストを保存(6章)。`checked` の更新、手動追加・削除 |
 
 ### 4.2 Edge Functions
 
@@ -266,7 +266,8 @@ create policy "household access" on meal_plan_days
 |---|---|---|
 | POST | `/functions/v1/generate-plan` | 計画全体の献立を生成 |
 | POST | `/functions/v1/regenerate` | 指定した日または品を再提案 |
-| POST | `/functions/v1/build-shopping-list` | 確定した計画から買い物リストを生成(再生成も同じ) |
+
+買い物リストは LLM を使わない決定的な計算なので、Edge Function ではなくクライアントで作る(6章)。
 
 **generate-plan**(非同期。生成は 30 秒前後かかるため、受付だけ返してバックグラウンドで実行)
 
@@ -295,22 +296,6 @@ create policy "household access" on meal_plan_days
 { "meal_plan_day_id": "uuid", "hint": "魚以外で" }
 // 品ごと
 { "planned_dish_id": "uuid", "hint": "もっとさっぱり" }
-```
-
-**build-shopping-list**
-
-```jsonc
-// Request
-{ "meal_plan_id": "uuid" }
-// Response 200
-{
-  "shopping_list_id": "uuid",
-  "sections": [
-    { "category": "野菜・果物", "items": [ { "name": "玉ねぎ", "amount": 3, "unit": "個" } ] },
-    { "category": "常備品(家にあるか確認)", "items": [ { "name": "醤油" } ] }
-  ],
-  "unresolved": [ { "raw_name": "ゆかり", "reason": "食材マスタに未登録" } ]
-}
 ```
 
 エラー形式(共通):
@@ -397,27 +382,41 @@ Claude の structured outputs(`output_config.format`)で、スキーマに適合
 
 ## 6. 買い物リスト生成
 
+実装: 計算は `apps/web/src/lib/shopping.ts`(純粋関数、単体テストあり)、保存は `replace_shopping_list` RPC。
+S4 で「決定して買い物リストを作る」を押すと、計画を確定してからリストを作り、S6 に移る。
+
 ```
 1. 計画の planned_dishes から recipe_ingredients を集める(mode = none の日は対象外)
-2. ingredient_id ごとにまとめる
-3. 単位をそろえる: base_unit に換算(例: 玉ねぎ 1個 + 100g → grams_per_piece=200 で 300g → 表示は「1.5個」)
+2. ingredient_id ごとにまとめる(マスタにない食材は表記を正規化した名前ごと)
+3. 単位をそろえる: 表記ゆれ(グラム→g など)、kg→g、L→ml、大さじ・小さじ・カップ→ml、
+   grams_per_piece があれば g→個(例: 玉ねぎ 1個 + 100g → 「1と1/2個」)
    換算できない組み合わせは行を分けて表示
-4. 余り物を差し引く(量が不明な余り物は「家にあるかも」と注記)
-5. is_pantry の食材は「常備品(家にあるか確認)」セクションへ
-6. category の売り場順で並べ替え
-7. 正規化できなかった食材は「その他」に入れ、unresolved として返す
+4. 丸める: 個数は 1/4 単位で切り上げ、g・ml は 10 単位で切り上げ
+5. 余り物を差し引く(「必要5個のうち3個は家にあり」と注記。量が不明なら「余り物が家にあるかも」)
+6. is_pantry の食材は量を出さず「常備品(家にあるか確認)」セクションの最後へ
+7. category の売り場順で並べる。マスタにない食材はキーワードで売り場を推定し、
+   分からなければ「野菜・果物」
+8. 複数の料理で使う食材には「親子丼・スープの2品分」と注記
 ```
 
-- 献立を修正して再生成するときは、**チェック済みの項目を引き継ぐ**(同じ ingredient_id なら `checked` を維持)
+**保存(`replace_shopping_list(p_plan_id, p_items)`)**
+
+- `status = confirmed` の計画だけ(それ以外は P0002)。1計画に1リスト
+- 各行に安定したキー `item_key`(`i:<食材ID>` / `n:<正規化した名前>`)を持たせ、`(shopping_list_id, item_key)` で upsert する
+- 献立を直して作り直しても、**同じキーの行は `checked` を維持**し、量や注記だけ更新する
+- 不要になった行は削除する。手動で追加した行(`is_manual`、キーなし)は残す
 
 ## 7. 同期とオフライン
 
 | 項目 | 方式 |
 |---|---|
-| チェックの同期 | Supabase Realtime で `shopping_items` を購読し、他端末の変更を即時反映 |
+| チェックの同期 | Supabase Realtime で `shopping_items` を購読し、変更があればリストを再取得 |
 | 同時編集 | `checked` は1項目1値なので後勝ちで十分 |
-| オフライン表示 | Service Worker が最新の買い物リストをキャッシュし、電波がなくても表示 |
-| オフライン中のチェック | 端末内(IndexedDB)のキューに積み、オンライン復帰時に送信 |
+| 画面の読み込み | Service Worker(vite-plugin-pwa)がアプリ本体をキャッシュし、電波がなくても起動 |
+| オフライン表示 | TanStack Query のキャッシュを localStorage に保存(`kondate-cache`、7日間)。電波がなくても最後に取得したリストを表示 |
+| オフライン中のチェック | 画面はすぐ更新し(楽観的更新)、送信は一時停止して保存。オンラインに戻るか、アプリを開き直したときに送信(失敗時は3回まで再試行) |
+| 起動時の状態 | TanStack Query は起動時に「オンライン」と仮定するため、`navigator.onLine` で初期化する |
+| ログアウト | キャッシュを消す |
 
 ## 8. 運用
 
@@ -426,7 +425,7 @@ Claude の structured outputs(`output_config.format`)で、スキーマに適合
 | keep-alive | GitHub Actions で週2回、軽い SELECT を実行(Supabase 無料枠の一時停止を防ぐ) |
 | バックアップ | 無料枠には自動バックアップがないため、月1回 `pg_dump` を GitHub Actions で取得し非公開の保存先に置く |
 | シークレット | LLM の API キーは Edge Function の環境変数にのみ保存 |
-| 食材マスタ | 初期データを seed SQL で投入。未登録の食材(unresolved)は設定画面から追加 |
+| 食材マスタ | 初期データを seed SQL で投入。未登録の食材は買い物リストで売り場をキーワード推定し、設定画面から追加 |
 
 ## 9. 画面デザイン(確定)
 

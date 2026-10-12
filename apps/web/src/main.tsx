@@ -1,15 +1,35 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
+import { registerShoppingMutations } from "./lib/shoppingList";
 import "./index.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: true,
+      // Keep data long enough to be restored from storage when the shop has no signal.
+      gcTime: 1000 * 60 * 60 * 24 * 7,
+    },
   },
+});
+registerShoppingMutations(queryClient);
+
+// TanStack Query assumes "online" at start and only listens for changes, so an app opened
+// without signal would send checks straight away and lose them. Start from the real state.
+onlineManager.setOnline(navigator.onLine);
+
+// The last data (and checks made offline) survive closing the app, so the shopping list
+// opens in the shop even without a connection.
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: "kondate-cache",
 });
 
 const root = document.getElementById("root");
@@ -17,12 +37,16 @@ if (!root) throw new Error("#root not found");
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7, buster: "v1" }}
+      onSuccess={() => void queryClient.resumePausedMutations()}
+    >
       <AuthProvider>
         <BrowserRouter>
           <App />
         </BrowserRouter>
       </AuthProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </StrictMode>,
 );

@@ -3,6 +3,7 @@ import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { AppMark, BackIcon } from "@/components/icons";
 import { useConfirmPlan, usePlan, useStartGeneration, type Plan } from "@/lib/plans";
+import { useBuildShoppingList } from "@/lib/shoppingList";
 
 /** S4 献立提案の確認 (also shows the generating / failed states). */
 export function ProposalPage() {
@@ -93,6 +94,7 @@ function Proposal({ plan }: { plan: Plan }) {
   const navigate = useNavigate();
   const confirm = useConfirmPlan();
   const regenerate = useStartGeneration();
+  const buildList = useBuildShoppingList();
   const general = plan.warnings.filter((w) => !w.date).map((w) => w.message);
 
   return (
@@ -128,11 +130,17 @@ function Proposal({ plan }: { plan: Plan }) {
             ) : null}
             <button
               type="button"
-              onClick={() => confirm.mutate(plan.id, { onSuccess: () => navigate("/") })}
-              disabled={confirm.isPending || regenerate.isPending}
+              onClick={() =>
+                confirm.mutate(plan.id, {
+                  // The list can also be built later from the shopping tab if this fails.
+                  onSuccess: () =>
+                    buildList.mutate(plan.id, { onSettled: () => navigate("/shopping") }),
+                })
+              }
+              disabled={confirm.isPending || buildList.isPending || regenerate.isPending}
               className="h-[52px] rounded-full bg-primary text-base font-bold text-white disabled:opacity-50"
             >
-              この献立で決定
+              {buildList.isPending ? "買い物リストを作っています…" : "決定して買い物リストを作る"}
             </button>
             <button
               type="button"

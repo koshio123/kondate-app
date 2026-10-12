@@ -1,9 +1,10 @@
 import { Link } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
-import { PlusIcon } from "@/components/icons";
+import { CartIcon, PlusIcon } from "@/components/icons";
 import { PageTitle } from "@/components/ScreenHeader";
 import { formatIsoShort, formatMonthDayLong, toIsoDate } from "@/lib/date";
 import { useCurrentPlan, type Plan } from "@/lib/plans";
+import { useShoppingList } from "@/lib/shoppingList";
 
 /** S1 ホーム */
 export function HomePage() {
@@ -105,6 +106,7 @@ function PlanSummary({ plan }: { plan: Plan }) {
   const [next, ...rest] = upcoming.length > 0 ? upcoming : plan.days;
   return (
     <>
+      <ShoppingProgressCard planId={plan.id} />
       {next ? (
         <section aria-labelledby="next-heading" className="flex flex-col gap-2">
           <h2 id="next-heading" className="font-display text-base font-bold">
@@ -124,5 +126,33 @@ function PlanSummary({ plan }: { plan: Plan }) {
         </section>
       ) : null}
     </>
+  );
+}
+
+function ShoppingProgressCard({ planId }: { planId: string }) {
+  const list = useShoppingList(planId);
+  const items = list.data?.items ?? [];
+  const done = items.filter((i) => i.checked).length;
+  return (
+    <Link
+      to="/shopping"
+      className="flex min-h-11 items-center gap-3.5 rounded-2xl bg-primary-soft px-4 py-3.5 text-ink"
+    >
+      <CartIcon className="text-primary" />
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="flex justify-between text-sm">
+          <span className="font-bold">買い物リスト</span>
+          <span className="text-muted">
+            {list.data ? `${done} / ${items.length} 品` : "まだ作っていません"}
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-surface">
+          <div
+            className="h-1.5 bg-primary"
+            style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }}
+          />
+        </div>
+      </div>
+    </Link>
   );
 }

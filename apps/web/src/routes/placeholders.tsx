@@ -10,18 +10,6 @@ function NotYet({ children }: { children: ReactNode }) {
   );
 }
 
-/** S6 買い物リスト */
-export function ShoppingPage() {
-  return (
-    <>
-      <PageTitle>買い物リスト</PageTitle>
-      <NotYet>
-        献立を決定すると、ここに売り場ごとの買い物リストが表示されます(次のステップで実装)。
-      </NotYet>
-    </>
-  );
-}
-
 /** S7 お気に入り */
 export function FavoritesPage() {
   return (

@@ -554,6 +554,7 @@ export type Database = {
           ingredient_id: string | null;
           is_manual: boolean;
           is_pantry: boolean;
+          item_key: string | null;
           note: string;
           position: number;
           shopping_list_id: string;
@@ -573,6 +574,7 @@ export type Database = {
           ingredient_id?: string | null;
           is_manual?: boolean;
           is_pantry?: boolean;
+          item_key?: string | null;
           note?: string;
           position?: number;
           shopping_list_id: string;
@@ -591,6 +593,7 @@ export type Database = {
           ingredient_id?: string | null;
           is_manual?: boolean;
           is_pantry?: boolean;
+          item_key?: string | null;
           note?: string;
           position?: number;
           shopping_list_id?: string;
@@ -659,6 +662,7 @@ export type Database = {
       claim_plan_generation: { Args: { p_plan_id: string }; Returns: boolean };
       fail_plan_generation: { Args: { p_error: string; p_plan_id: string }; Returns: undefined };
       my_household_id: { Args: Record<PropertyKey, never>; Returns: string };
+      replace_shopping_list: { Args: { p_items: Json; p_plan_id: string }; Returns: string };
       save_generated_plan: {
         Args: { p_days: Json; p_meta: Json; p_plan_id: string };
         Returns: undefined;

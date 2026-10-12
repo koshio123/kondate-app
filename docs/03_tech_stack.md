@@ -17,8 +17,8 @@
 | サーバー処理 | Supabase Edge Functions(Deno / TypeScript) | **決定** |
 | フロントエンド | **React + Vite + TypeScript + vite-plugin-pwa** | **決定**(2026-10-12) |
 | UI | Tailwind CSS + shadcn/ui | 案 |
-| データ取得 | supabase-js + TanStack Query | 案 |
-| オフライン | Service Worker(Workbox)+ IndexedDB(Dexie) | 案 |
+| データ取得 | supabase-js + TanStack Query | **決定**(実装済み) |
+| オフライン | Service Worker(Workbox)+ TanStack Query のキャッシュ保存(localStorage)と一時停止したミューテーション | **決定**(2026-10-12。リストは数十行なので IndexedDB は不要と判断) |
 | ホスティング | Cloudflare Pages(静的配信) | 案 |
 | LLM | **Claude Sonnet 5.5(献立生成)+ Claude Haiku 5.5(軽い処理)** | **決定**(2026-10-12。実装初期の比較で最終確認) |
 | データ整備スクリプト | Python(食品成分表の取り込み) | 案 |
@@ -183,8 +183,7 @@ kondate-app/
 │   ├── functions/
 │   │   ├── _shared/          # LLM クライアント、検証ロジック、スキーマ
 │   │   ├── generate-plan/
-│   │   ├── regenerate/
-│   │   └── build-shopping-list/
+│   │   └── regenerate/
 │   ├── seed.sql              # 食材マスタ、売り場カテゴリ
 │   └── tests/                # pgTAP
 ├── scripts/
