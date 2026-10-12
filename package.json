@@ -1,0 +1,26 @@
+{
+  "name": "kondate-app",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:start": "supabase start",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --local --schema public > apps/web/src/types/database.ts && prettier --write apps/web/src/types/database.ts",
+    "eval:plan": "pnpm --filter plan-eval start"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "supabase": "^2.120.0"
+  }
+}

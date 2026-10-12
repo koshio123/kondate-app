@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* Design tokens: docs/02_design.md "9.1 デザイントークン" */
+@theme {
+  --color-canvas: #fbf5ec;
+  --color-surface: #ffffff;
+  --color-line: #eadccb;
+  --color-divider: #f1e7da;
+  --color-ink: #2a211b;
+  --color-muted: #6e6157;
+  --color-primary: #b4501f;
+  --color-primary-strong: #8e3e17;
+  --color-primary-soft: #f6e2d3;
+  --color-quick: #2d6a86;
+  --color-quick-soft: #dcebf1;
+  --color-rest: #5f544b;
+  --color-rest-soft: #efe7dd;
+  --color-leftover: #3f6a2a;
+  --color-leftover-soft: #e4efd9;
+  --color-danger: #7c2d12;
+  --color-danger-soft: #fbe9e4;
+
+  --font-display: "Zen Maru Gothic", sans-serif;
+  --font-sans: "BIZ UDPGothic", sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
