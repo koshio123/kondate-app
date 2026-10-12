@@ -1,7 +1,7 @@
 import type { LeftoverInput, OutlineDay, PlanInput } from "./types.ts";
 
 /** Bump when the wording changes so evaluation reports can be compared. */
-export const PROMPT_VERSION = "2026-10-12.2";
+export const PROMPT_VERSION = "2026-10-12.3";
 
 const ROLE = `あなたは日本の家庭の夕食献立を考えるアシスタントです。
 入力(JSON)の条件をすべて守ってください。`;
@@ -34,6 +34,7 @@ const DETAIL_RULES = `# 分量と書き方
 - 分量は servings 人分。調味料は大さじ・小さじ、それ以外は g・ml・個・本・束・枚・丁・袋・切れ・パックなどで書く。「少々」「適量」は amount を null にして unit に書く。
 - 塩・醤油・味噌・砂糖・みりん・酒・酢・油・ごま油・片栗粉・小麦粉・だしの素・こしょう・米は is_pantry を true にする。
 - ご飯(主食や丼のご飯)は ingredients に「米」を servings × 0.5 合(単位「合」)で入れる。「ご飯 ◯杯」とは書かない。
+- 食材名は商品名だけを書き、括弧書きの注記(「〜不使用」など)は付けない。
 - 手順は各1文で6つ以内。料理名・食材名は日本語。`;
 
 /** One-shot: all days with ingredients and steps in a single call (kept for comparison). */

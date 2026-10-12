@@ -14,18 +14,19 @@ export function claudeCaller(model: string): CallModel {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
   const client = new Anthropic({ apiKey });
 
-  return async ({ system, messages, schema }) => {
+  return async ({ system, messages, schema, effort }) => {
     const res = await client.messages.create({
       model,
       max_tokens: 16000,
       system,
       messages,
-      output_config: { format: { type: "json_schema", schema } },
+      output_config: { effort, format: { type: "json_schema", schema } },
     });
     return {
       text: res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(""),
       inputTokens: res.usage.input_tokens,
       outputTokens: res.usage.output_tokens,
+      thinkingTokens: res.usage.output_tokens_details?.thinking_tokens,
       stopReason: res.stop_reason,
     };
   };

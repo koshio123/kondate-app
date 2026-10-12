@@ -143,6 +143,14 @@ describe("normalizeFoodName", () => {
     expect(normalizeFoodName("ｷｬﾍﾞﾂ ")).toBe("きゃべつ");
   });
 
+  it("ignores 'free of X' notes but keeps other notes", () => {
+    const celery = restrictionTerms({ label: "セロリ", kind: "never" });
+    expect(containsAnyTerm("固形コンソメ(セロリ不使用のもの)", celery)).toBe(false);
+    expect(containsAnyTerm("固形コンソメ(セロリ入り)", celery)).toBe(true);
+    const egg = restrictionTerms({ label: "卵", kind: "allergy" });
+    expect(containsAnyTerm("ドレッシング（卵入り）", egg)).toBe(true);
+  });
+
   it("adds hidden sources for allergens only", () => {
     expect(containsAnyTerm("マヨネーズ", restrictionTerms({ label: "卵", kind: "allergy" }))).toBe(
       true,
@@ -321,6 +329,7 @@ describe("generateTwoStage", () => {
     expect(result.plan).toEqual(plan);
     expect(model.calls).toHaveLength(1 + plan.days.length);
     expect(result.retries).toBe(0);
+    expect(model.calls.map((c) => c.effort)).toEqual(["medium", "low", "low", "low"]);
   });
 
   it("retries only the day whose details break a restriction", async () => {
@@ -387,10 +396,18 @@ describe("prompts and report", () => {
         : reply(detailOf(plan, JSON.parse(request.messages[0]!.content.split("\n\n")[1]!).date)),
     );
     const report = renderReport(
-      [{ scenario: { ...SCENARIOS[0]!, input }, model: MODELS[0]!, repeat: 1, result }],
+      [
+        {
+          scenario: { ...SCENARIOS[0]!, input },
+          model: MODELS[0]!,
+          repeat: 1,
+          variant: "two-stage (medium/low)",
+          result,
+        },
+      ],
       { promptVersion: "test", startedAt: "2026-10-12T00:00:00Z" },
     );
-    expect(report).toContain("| Claude Sonnet 5.5 | two-stage | 1 | 1/1 | 1/1 |");
+    expect(report).toContain("| Claude Sonnet 5.5 | two-stage (medium/low) | 1 | 1/1 | 1/1 |");
     expect(report).toContain("主菜: 豚こまとキャベツの味噌炒め(20分) [余: キャベツ]");
   });
 });

@@ -663,6 +663,10 @@ export type Database = {
         Args: { p_days: Json; p_meta: Json; p_plan_id: string };
         Returns: undefined;
       };
+      save_plan_draft: {
+        Args: { p_days: Json; p_end: string; p_plan_id: string; p_start: string };
+        Returns: string;
+      };
     };
     Enums: {
       [_ in never]: never;

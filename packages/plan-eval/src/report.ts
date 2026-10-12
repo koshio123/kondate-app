@@ -7,6 +7,8 @@ export interface RunRecord {
   scenario: Scenario;
   model: ModelCandidate;
   repeat: number;
+  /** Strategy and settings, e.g. "two-stage (medium/low)". */
+  variant: string;
   result: GenerationResult;
 }
 
@@ -27,7 +29,7 @@ const WALL_CLOCK_LIMIT_SEC = 150;
 export function summarize(records: RunRecord[]) {
   const groups = new Map<string, RunRecord[]>();
   for (const r of records) {
-    const key = `${r.model.key}/${r.result.strategy}`;
+    const key = `${r.model.key}/${r.variant}`;
     groups.set(key, [...(groups.get(key) ?? []), r]);
   }
 
@@ -36,11 +38,12 @@ export function summarize(records: RunRecord[]) {
     const attempts = runs.flatMap((r) => r.result.attempts);
     const inputTokens = attempts.reduce((n, a) => n + a.reply.inputTokens, 0);
     const outputTokens = attempts.reduce((n, a) => n + a.reply.outputTokens, 0);
+    const thinkingTokens = attempts.reduce((n, a) => n + (a.reply.thinkingTokens ?? 0), 0);
     const totals = runs.map((r) => r.result.totalMs / 1000);
     const costPerRun = costUsd(model, inputTokens, outputTokens) / runs.length;
     return {
       model,
-      strategy: runs[0]!.result.strategy,
+      variant: runs[0]!.variant,
       runs: runs.length,
       noRetry: runs.filter((r) => r.result.plan !== null && r.result.retries === 0).length,
       finalOk: runs.filter((r) => r.result.plan !== null).length,
@@ -52,6 +55,7 @@ export function summarize(records: RunRecord[]) {
       maxTotalSec: Math.max(...totals),
       avgInputTokens: inputTokens / runs.length,
       avgOutputTokens: outputTokens / runs.length,
+      avgThinkingTokens: thinkingTokens / runs.length,
       costPerRunUsd: costPerRun,
       monthlyJpy: costPerRun * PLANS_PER_MONTH * JPY_PER_USD,
     };
@@ -69,13 +73,13 @@ export function renderReport(
 
   lines.push("## 集計", "");
   lines.push(
-    "| モデル | 方式 | 実行数 | 再生成なしで合格 | 最終合格 | 平均警告 | 余り物使用率 | 所要時間 平均/最大(秒) | 入力tok | 出力tok | 1回あたり | 月額目安(6回) |",
+    "| モデル | 方式 | 実行数 | 再生成なしで合格 | 最終合格 | 平均警告 | 余り物使用率 | 所要時間 平均/最大(秒) | 入力tok | 出力tok(うち思考) | 1回あたり | 月額目安(6回) |",
     "|---|---|---|---|---|---|---|---|---|---|---|---|",
   );
   for (const s of summarize(records)) {
     const over = s.maxTotalSec > WALL_CLOCK_LIMIT_SEC ? " ⚠" : "";
     lines.push(
-      `| ${s.model.label} | ${s.strategy} | ${s.runs} | ${s.noRetry}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.avgTotalSec.toFixed(1)} / ${s.maxTotalSec.toFixed(1)}${over} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
+      `| ${s.model.label} | ${s.variant} | ${s.runs} | ${s.noRetry}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.avgTotalSec.toFixed(1)} / ${s.maxTotalSec.toFixed(1)}${over} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} (${Math.round(s.avgThinkingTokens)}) | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
     );
   }
   lines.push(
@@ -87,7 +91,7 @@ export function renderReport(
   lines.push("## 献立(味・バランスの目視確認用)", "");
   for (const r of records) {
     const repeat = r.repeat > 1 ? ` (#${r.repeat})` : "";
-    lines.push(`### ${r.scenario.title} / ${r.model.label} / ${r.result.strategy}${repeat}`, "");
+    lines.push(`### ${r.scenario.title} / ${r.model.label} / ${r.variant}${repeat}`, "");
     const plan = r.result.plan ?? r.result.lastPlan;
     if (!plan) {
       lines.push(`生成失敗: ${r.result.failure ?? "不明"}`, "");

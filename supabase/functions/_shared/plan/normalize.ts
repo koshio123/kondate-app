@@ -1,13 +1,18 @@
 import type { RestrictionInput } from "./types.ts";
 
+const FREE_OF = /不使用|なし|無し|抜き|除去|フリー|free/i;
+
 /**
- * Normalizes a food name for matching: NFKC (full/half width), katakana -> hiragana,
- * whitespace removed. "タマゴ" and "たまご" become equal; "卵" stays a separate spelling
+ * Normalizes a food name for matching: NFKC (full/half width), "free of X" notes removed,
+ * katakana -> hiragana, whitespace removed. "タマゴ" and "たまご" become equal; "卵" stays a separate spelling
  * and is matched through aliases.
  */
 export function normalizeFoodName(value: string): string {
   return value
     .normalize("NFKC")
+    // A note that says the item is free of something ("固形コンソメ(セロリ不使用のもの)") must not
+    // match that something. Other notes stay: "ドレッシング(卵入り)" must still match 卵.
+    .replace(/\(([^)]*)\)|【([^】]*)】/g, (note, a, b) => (FREE_OF.test(a ?? b ?? "") ? "" : note))
     .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
     .replace(/\s+/g, "")
     .toLowerCase();

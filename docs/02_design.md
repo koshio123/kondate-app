@@ -255,7 +255,7 @@ create policy "household access" on meal_plan_days
 | リソース | 操作 |
 |---|---|
 | members, member_food_restrictions, household_settings | CRUD |
-| meal_plans, meal_plan_days | 作成・モード変更・削除 |
+| meal_plans, meal_plan_days | `save_plan_draft` RPC で期間と日ごとのモードを1トランザクションで作成・変更。決定(status = confirmed) |
 | leftovers | CRUD |
 | recipes | お気に入り・評価・メモの更新、手動登録 |
 | shopping_items | `checked` の更新、手動追加 |
@@ -284,7 +284,7 @@ create policy "household access" on meal_plan_days
 | 409 `ALREADY_GENERATING` | 生成中、または確定済み |
 | 422 `NO_DAYS` | 献立を作る日がない(全日「なし」) |
 
-クライアントは `meal_plans` の変更を Realtime で購読し、`status` が `proposed` になったら S4 を表示する。
+クライアントは `status` が `generating` の間、3秒ごとに計画を再取得し(TanStack Query の refetchInterval)、`proposed` になったら S4 に献立を表示する。生成は1分前後で終わるため、Realtime よりも単純なポーリングにした。
 失敗時は `status = draft` に戻り、`generation_error` に画面表示用のメッセージが入る。
 警告(苦手食材、傷みやすい食材が後半、など)は `generation_meta.warnings` に入る。
 
@@ -348,7 +348,7 @@ sequenceDiagram
     F->>F: 検証(品数一致・調味料まで含めた制限食材)、違反なら1回だけ作り直し
   end
   F->>DB: save_generated_plan(1トランザクションで recipes / planned_dishes 保存、status = proposed)
-  DB-->>C: Realtime で status の変更を通知
+  C->>DB: 3秒ごとに status を確認(ポーリング)
 ```
 
 ### 5.1 LLM への入力

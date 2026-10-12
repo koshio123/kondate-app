@@ -20,17 +20,23 @@ export interface ChatMessage {
   content: string;
 }
 
+export type Effort = "low" | "medium" | "high";
+
 export interface ModelRequest {
   system: string;
   messages: ChatMessage[];
   /** JSON schema for structured output. */
   schema: Record<string, unknown>;
+  /** How much the model may think (output_config.effort). */
+  effort: Effort;
 }
 
 export interface ModelReply {
   text: string;
   inputTokens: number;
   outputTokens: number;
+  /** Part of outputTokens spent on thinking, when the API reports it. */
+  thinkingTokens?: number;
   /** e.g. "end_turn", "max_tokens", "refusal" */
   stopReason: string | null;
 }
@@ -66,7 +72,17 @@ export interface GenerationResult {
   failure: string | null;
 }
 
+/**
+ * Default effort per stage. Deciding the menu benefits from some thinking; writing out
+ * ingredients and steps for fixed dishes is mechanical. Measured in docs/04_model_evaluation.md.
+ */
+export const DEFAULT_EFFORT = { plan: "medium", outline: "medium", detail: "low" } as const satisfies Record<
+  string,
+  Effort
+>;
+
 export interface GenerateOptions {
+  effort?: Partial<Record<keyof typeof DEFAULT_EFFORT, Effort>>;
   /** Retries after the first attempt, per stage call. */
   maxRetries?: number;
   now?: () => number;
@@ -99,6 +115,7 @@ export async function generateOneShot(
 
   const loop = await retryLoop<GeneratedPlan>({
     stage: "plan",
+    effort: options.effort?.plan ?? DEFAULT_EFFORT.plan,
     system,
     user,
     schema: PLAN_OUTPUT_SCHEMA,
@@ -142,6 +159,7 @@ export async function generateTwoStage(
   const outlinePrompt = buildOutlinePrompt(input);
   const outlineLoop = await retryLoop<PlanOutline>({
     stage: "outline",
+    effort: options.effort?.outline ?? DEFAULT_EFFORT.outline,
     system: outlinePrompt.system,
     user: outlinePrompt.user,
     schema: OUTLINE_SCHEMA,
@@ -172,6 +190,7 @@ export async function generateTwoStage(
       const prompt = buildDayDetailPrompt(input, day);
       const loop = await retryLoop<DayDetail>({
         stage: `detail:${day.date}`,
+        effort: options.effort?.detail ?? DEFAULT_EFFORT.detail,
         system: prompt.system,
         user: prompt.user,
         schema: DAY_DETAIL_SCHEMA,
@@ -222,6 +241,7 @@ const MALFORMED: Issue = { code: "DETAIL_MISMATCH", message: "出力の形がス
 
 interface RetryLoopArgs<T> {
   stage: string;
+  effort: Effort;
   system: string;
   user: string;
   schema: Record<string, unknown>;
@@ -245,7 +265,12 @@ async function retryLoop<T>(args: RetryLoopArgs<T>): Promise<{
 
   for (let i = 0; i <= args.maxRetries; i++) {
     const started = args.now();
-    const reply = await args.callModel({ system: args.system, messages, schema: args.schema });
+    const reply = await args.callModel({
+      system: args.system,
+      messages,
+      schema: args.schema,
+      effort: args.effort,
+    });
     const elapsedMs = args.now() - started;
 
     const parsed = parseReply<T>(reply);

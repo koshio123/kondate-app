@@ -1,31 +1,128 @@
 import { Link } from "react-router";
+import { DayMenuCard } from "@/components/DayMenuCard";
 import { PlusIcon } from "@/components/icons";
 import { PageTitle } from "@/components/ScreenHeader";
-import { formatMonthDayLong } from "@/lib/date";
+import { formatIsoShort, formatMonthDayLong, toIsoDate } from "@/lib/date";
+import { useCurrentPlan, type Plan } from "@/lib/plans";
 
-/** S1 ホーム. Shows the empty state until meal plans are implemented. */
+/** S1 ホーム */
 export function HomePage() {
+  const current = useCurrentPlan();
+  const plan = current.data ?? null;
+
   return (
     <div className="flex min-h-full flex-col">
       <div className="px-5 pt-6 text-[13px] text-muted">{formatMonthDayLong(new Date())}</div>
-      <PageTitle>今週のこんだて</PageTitle>
+      <PageTitle
+        sub={
+          plan
+            ? `${formatIsoShort(plan.start_date)} 〜 ${formatIsoShort(plan.end_date)}・${plan.days.length}日間`
+            : undefined
+        }
+      >
+        今週のこんだて
+      </PageTitle>
       <main className="flex flex-1 flex-col gap-4 px-5 pb-5">
-        <section className="flex flex-col items-center gap-2 rounded-[20px] border border-line bg-surface px-5 py-10 text-center">
-          <p className="font-display text-base font-bold">まだ献立がありません</p>
-          <p className="text-sm leading-relaxed text-muted">
-            期間と日ごとの予定を決めると、
-            <br />
-            夕食の献立を提案します。
+        {current.isPending ? (
+          <p className="py-10 text-center text-sm text-muted">読み込み中…</p>
+        ) : current.isError ? (
+          <p role="alert" className="py-10 text-center text-sm text-danger">
+            献立を読み込めませんでした。電波の良い場所で開き直してください。
           </p>
-        </section>
-        <Link
-          to="/plan/new"
-          className="mt-auto flex h-[52px] items-center justify-center gap-2 rounded-full bg-primary text-base font-bold text-white"
-        >
-          <PlusIcon size={20} />
-          献立を計画する
-        </Link>
+        ) : plan ? (
+          <PlanSummary plan={plan} />
+        ) : (
+          <EmptyState />
+        )}
+        {!plan || plan.status === "confirmed" ? (
+          <Link
+            to="/plan/new"
+            className={`mt-auto flex h-[52px] items-center justify-center gap-2 rounded-full text-base font-bold ${
+              plan ? "border-2 border-primary text-primary" : "bg-primary text-white"
+            }`}
+          >
+            <PlusIcon size={20} />
+            {plan ? "次の献立を計画する" : "献立を計画する"}
+          </Link>
+        ) : null}
       </main>
     </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <section className="flex flex-col items-center gap-2 rounded-[20px] border border-line bg-surface px-5 py-10 text-center">
+      <p className="font-display text-base font-bold">まだ献立がありません</p>
+      <p className="text-sm leading-relaxed text-muted">
+        期間と日ごとの予定を決めると、
+        <br />
+        夕食の献立を提案します。
+      </p>
+    </section>
+  );
+}
+
+const STATUS_BANNER: Partial<
+  Record<Plan["status"], { text: string; action: string; to: (id: string) => string }>
+> = {
+  draft: { text: "献立の計画が途中です", action: "続きから", to: (id) => `/plans/${id}/leftovers` },
+  generating: {
+    text: "献立を考えています…",
+    action: "様子を見る",
+    to: (id) => `/plans/${id}/proposal`,
+  },
+  proposed: {
+    text: "献立の提案が届きました",
+    action: "確認する",
+    to: (id) => `/plans/${id}/proposal`,
+  },
+};
+
+function PlanSummary({ plan }: { plan: Plan }) {
+  const banner = STATUS_BANNER[plan.status];
+  if (banner) {
+    return (
+      <Link
+        to={banner.to(plan.id)}
+        className="flex min-h-16 items-center gap-3 rounded-2xl bg-primary-soft px-4 py-3 text-ink"
+      >
+        <span
+          className={`flex-1 text-[15px] font-bold ${plan.status === "generating" ? "animate-pulse" : ""}`}
+        >
+          {plan.generation_error && plan.status === "draft"
+            ? "献立を作れませんでした"
+            : banner.text}
+        </span>
+        <span className="text-sm font-bold text-primary">{banner.action}</span>
+      </Link>
+    );
+  }
+
+  // Confirmed: today's (or the next) dinner first, then the rest of the period.
+  const today = toIsoDate(new Date());
+  const upcoming = plan.days.filter((d) => d.date >= today);
+  const [next, ...rest] = upcoming.length > 0 ? upcoming : plan.days;
+  return (
+    <>
+      {next ? (
+        <section aria-labelledby="next-heading" className="flex flex-col gap-2">
+          <h2 id="next-heading" className="font-display text-base font-bold">
+            {next.date === today ? "今日の夕食" : "次の夕食"}
+          </h2>
+          <DayMenuCard day={next} />
+        </section>
+      ) : null}
+      {rest.length > 0 ? (
+        <section aria-labelledby="later-heading" className="flex flex-col gap-2">
+          <h2 id="later-heading" className="font-display text-base font-bold">
+            この先の献立
+          </h2>
+          {rest.map((day) => (
+            <DayMenuCard key={day.id} day={day} />
+          ))}
+        </section>
+      ) : null}
+    </>
   );
 }
