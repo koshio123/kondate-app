@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { AppMark, BackIcon, RefreshIcon } from "@/components/icons";
@@ -106,7 +106,12 @@ function Proposal({ plan }: { plan: Plan }) {
   const buildList = useBuildShoppingList();
   const partial = useRegenerate();
   const swap = useSwapDish();
-  const [sheet, setSheet] = useState<ResuggestTarget | null>(null);
+  // "?day=2026-10-14" (from S2 when a single day of this plan is planned again) opens that day.
+  const [params, setParams] = useSearchParams();
+  const [sheet, setSheet] = useState<ResuggestTarget | null>(() => {
+    const day = plan.days.find((d) => d.date === params.get("day") && d.mode !== "none");
+    return day ? { day } : null;
+  });
   const [busyDayId, setBusyDayId] = useState<string | null>(null);
   const general = plan.warnings.filter((w) => !w.date).map((w) => w.message);
   const changing = partial.isPending || swap.isPending;
@@ -176,7 +181,10 @@ function Proposal({ plan }: { plan: Plan }) {
       {sheet ? (
         <ResuggestSheet
           target={sheet}
-          onClose={() => setSheet(null)}
+          onClose={() => {
+            setSheet(null);
+            if (params.has("day")) setParams({}, { replace: true });
+          }}
           onRegenerate={(hint) => regenerateTarget(sheet, hint)}
           onSwap={(recipeId) => swapTarget(sheet, recipeId)}
         />
@@ -206,7 +214,9 @@ function Proposal({ plan }: { plan: Plan }) {
                 confirm.mutate(plan.id, {
                   // The list can also be built later from the shopping tab if this fails.
                   onSuccess: () =>
-                    buildList.mutate(plan.id, { onSettled: () => navigate("/shopping") }),
+                    buildList.mutate(plan.id, {
+                      onSettled: () => navigate(`/shopping?plan=${plan.id}`),
+                    }),
                 })
               }
               disabled={

@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { PageTitle } from "@/components/ScreenHeader";
 import { formatIsoShort } from "@/lib/date";
-import { useCurrentPlan, type Plan } from "@/lib/plans";
+import { useActivePlans, type Plan } from "@/lib/plans";
 import { formatQuantity } from "@/lib/shopping";
 import {
   useAddManualItem,
@@ -20,23 +20,47 @@ const PANTRY_SECTION = "常備品(家にあるか確認)";
 
 /** S6 買い物リスト */
 export function ShoppingPage() {
-  const current = useCurrentPlan();
-  const plan = current.data;
+  const active = useActivePlans();
+  const [params, setParams] = useSearchParams();
 
-  if (current.isPending) return <Shell>読み込み中…</Shell>;
-  if (!plan || plan.status !== "confirmed") {
+  if (active.isPending) return <Shell>読み込み中…</Shell>;
+  const all = active.data ?? [];
+  const confirmed = all.filter((p) => p.status === "confirmed");
+  // ?plan= picks a list (from the home card or after deciding); otherwise the earliest one.
+  const plan = confirmed.find((p) => p.id === params.get("plan")) ?? confirmed[0];
+  if (!plan) {
+    const pending = all.find((p) => p.status === "proposed");
     return (
       <Shell>
         献立を決定すると、ここに売り場ごとの買い物リストが表示されます。
-        {plan ? (
-          <Link to={`/plans/${plan.id}/proposal`} className="mt-3 block font-bold text-primary">
+        {pending ? (
+          <Link to={`/plans/${pending.id}/proposal`} className="mt-3 block font-bold text-primary">
             献立の提案を確認する
           </Link>
         ) : null}
       </Shell>
     );
   }
-  return <PlanShopping plan={plan} />;
+  return (
+    <>
+      {confirmed.length > 1 ? (
+        <div role="group" aria-label="どの献立の買い物リストか" className="flex gap-2 px-5 pt-4">
+          {confirmed.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={p.id === plan.id}
+              onClick={() => setParams({ plan: p.id }, { replace: true })}
+              className={`h-9 rounded-full px-3.5 text-[13px] ${p.id === plan.id ? "bg-ink font-bold text-white" : "border border-[#D9CBB9] bg-surface"}`}
+            >
+              {formatIsoShort(p.start_date)}〜
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <PlanShopping key={plan.id} plan={plan} />
+    </>
+  );
 }
 
 function Shell({ children }: { children: ReactNode }) {

@@ -148,10 +148,11 @@ reset role;
 set local role anon;
 set local request.jwt.claims = '{"role": "anon"}';
 
-select is(
-  (select count(*) from public.meal_plans),
-  0::bigint,
-  'anon sees nothing'
+-- Not even allowed to query household tables (20261013000700_data_api_grants.sql).
+select throws_ok(
+  'select count(*) from public.meal_plans',
+  '42501', null,
+  'anon cannot query household tables'
 );
 
 select * from finish();

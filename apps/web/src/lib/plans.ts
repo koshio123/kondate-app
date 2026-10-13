@@ -114,25 +114,33 @@ export function usePlan(planId: string | undefined) {
   });
 }
 
-/** The plan to show on the home screen: the latest one that has not ended yet. */
-export function useCurrentPlan() {
+/**
+ * Plans that have not ended yet, earliest first. Plans never share a date
+ * (save_plan_draft gives each date to the plan saved last), so the first one is the plan
+ * for today, or the next one when today has none.
+ */
+export function useActivePlans() {
   return useQuery({
-    queryKey: ["plan", "current"],
+    queryKey: ["plan", "active"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("meal_plans")
         .select(PLAN_SELECT)
         .gte("end_date", toIsoDate(new Date()))
         .neq("status", "archived")
-        .order("start_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("start_date", { ascending: true });
       if (error) throw error;
-      return data ? toPlan(data as unknown as Record<string, unknown>) : null;
+      return (data as unknown as Record<string, unknown>[]).map(toPlan);
     },
     refetchInterval: (query) =>
-      query.state.data?.status === "generating" ? GENERATING_POLL_MS : false,
+      query.state.data?.some((p) => p.status === "generating") ? GENERATING_POLL_MS : false,
   });
+}
+
+/** The plan to show first on the home screen (today's, or the next one). */
+export function useCurrentPlan() {
+  const active = useActivePlans();
+  return { ...active, data: active.data ? (active.data[0] ?? null) : undefined };
 }
 
 // ---------------------------------------------------------------------------

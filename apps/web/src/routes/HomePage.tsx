@@ -3,13 +3,14 @@ import { DayMenuCard } from "@/components/DayMenuCard";
 import { CartIcon, PlusIcon } from "@/components/icons";
 import { PageTitle } from "@/components/ScreenHeader";
 import { formatIsoShort, formatMonthDayLong, toIsoDate } from "@/lib/date";
-import { useCurrentPlan, type Plan } from "@/lib/plans";
+import { useActivePlans, type Plan } from "@/lib/plans";
 import { useShoppingList } from "@/lib/shoppingList";
 
 /** S1 ホーム */
 export function HomePage() {
-  const current = useCurrentPlan();
-  const plan = current.data ?? null;
+  const current = useActivePlans();
+  // Today's plan (or the next one) in full; any later plans as links below it.
+  const [plan = null, ...later] = current.data ?? [];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -31,11 +32,14 @@ export function HomePage() {
             献立を読み込めませんでした。電波の良い場所で開き直してください。
           </p>
         ) : plan ? (
-          <PlanSummary plan={plan} />
+          <>
+            <PlanSummary plan={plan} />
+            {later.length > 0 ? <LaterPlans plans={later} /> : null}
+          </>
         ) : (
           <EmptyState />
         )}
-        {!plan || plan.status === "confirmed" ? (
+        {!plan || (plan.status === "confirmed" && later.length === 0) ? (
           <Link
             to="/plan/new"
             className={`mt-auto flex h-[52px] items-center justify-center gap-2 rounded-full text-base font-bold ${
@@ -129,13 +133,46 @@ function PlanSummary({ plan }: { plan: Plan }) {
   );
 }
 
+const STATUS_LABEL: Record<Plan["status"], string> = {
+  draft: "計画中",
+  generating: "献立を考えています",
+  proposed: "提案を確認してください",
+  confirmed: "決定済み",
+  archived: "",
+};
+
+function LaterPlans({ plans }: { plans: Plan[] }) {
+  return (
+    <section aria-labelledby="later-plans-heading" className="flex flex-col gap-2">
+      <h2 id="later-plans-heading" className="font-display text-base font-bold">
+        次の献立
+      </h2>
+      {plans.map((p) => (
+        <Link
+          key={p.id}
+          to={p.status === "draft" ? `/plans/${p.id}/leftovers` : `/plans/${p.id}/proposal`}
+          className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-ink"
+        >
+          <span className="flex flex-1 flex-col">
+            <span className="text-[15px] font-bold">
+              {formatIsoShort(p.start_date)} 〜 {formatIsoShort(p.end_date)}
+            </span>
+            <span className="text-xs text-muted">{STATUS_LABEL[p.status]}</span>
+          </span>
+          <span className="text-sm font-bold text-primary">開く</span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
 function ShoppingProgressCard({ planId }: { planId: string }) {
   const list = useShoppingList(planId);
   const items = list.data?.items ?? [];
   const done = items.filter((i) => i.checked).length;
   return (
     <Link
-      to="/shopping"
+      to={`/shopping?plan=${planId}`}
       className="flex min-h-11 items-center gap-3.5 rounded-2xl bg-primary-soft px-4 py-3.5 text-ink"
     >
       <CartIcon className="text-primary" />

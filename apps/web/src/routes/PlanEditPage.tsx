@@ -4,7 +4,9 @@ import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { BackIcon } from "@/components/icons";
 import type { DayMode } from "@/components/ModeBadge";
 import { addDays, datesInRange, formatIsoShort, toIsoDate } from "@/lib/date";
-import { usePlan, useSavePlanDraft, type Plan } from "@/lib/plans";
+import { containingPlan, defaultStart, overlapEffects } from "@/lib/planOverlap";
+import { useActivePlans, usePlan, useSavePlanDraft, type Plan } from "@/lib/plans";
+import { useBuildShoppingList } from "@/lib/shoppingList";
 
 const MAX_DAYS = 10;
 const DEFAULT_DAYS = 5;
@@ -25,16 +27,21 @@ const HINTS: Record<DayMode, string> = {
 export function PlanEditPage() {
   const { planId } = useParams();
   const plan = usePlan(planId);
+  const active = useActivePlans();
 
-  if (planId && plan.isPending) return <FullScreenMessage>読み込み中…</FullScreenMessage>;
+  if ((planId && plan.isPending) || active.isPending) {
+    return <FullScreenMessage>読み込み中…</FullScreenMessage>;
+  }
   if (planId && !plan.data) return <FullScreenMessage>献立が見つかりません</FullScreenMessage>;
-  return <PlanEditForm key={planId ?? "new"} plan={plan.data ?? null} />;
+  return <PlanEditForm key={planId ?? "new"} plan={plan.data ?? null} others={active.data ?? []} />;
 }
 
-function PlanEditForm({ plan }: { plan: Plan | null }) {
+function PlanEditForm({ plan, others }: { plan: Plan | null; others: Plan[] }) {
   const navigate = useNavigate();
   const save = useSavePlanDraft();
-  const tomorrow = addDays(toIsoDate(new Date()), 1);
+  const rebuildList = useBuildShoppingList();
+  // A new plan starts after the plans already made, so it does not replace them by accident.
+  const tomorrow = defaultStart(addDays(toIsoDate(new Date()), 1), others);
 
   const [start, setStart] = useState(plan?.start_date ?? tomorrow);
   const [end, setEnd] = useState(plan?.end_date ?? addDays(tomorrow, DEFAULT_DAYS - 1));
@@ -60,8 +67,18 @@ function PlanEditForm({ plan }: { plan: Plan | null }) {
     setEnd(addDays(value, length - 1));
   }
 
+  const selfId = plan?.id ?? null;
+  const effects = rangeError ? [] : overlapEffects(start, end, others, selfId);
+  const inside = rangeError ? null : containingPlan(start, end, others, selfId);
+
   async function submit() {
-    const id = await save.mutateAsync({ planId: plan?.id ?? null, start, end, days });
+    const id = await save.mutateAsync({ planId: selfId, start, end, days });
+    // A shortened plan that was already decided gets its shopping list rebuilt (checks kept).
+    await Promise.all(
+      effects
+        .filter((e) => e.kind === "trim" && e.plan.status === "confirmed")
+        .map((e) => rebuildList.mutateAsync(e.plan.id).catch(() => undefined)),
+    );
     navigate(`/plans/${id}/leftovers`);
   }
 
@@ -100,6 +117,10 @@ function PlanEditForm({ plan }: { plan: Plan | null }) {
             {rangeError ?? `${dates.length}日間・最大${MAX_DAYS}日まで計画できます`}
           </p>
         </section>
+
+        {effects.length > 0 ? (
+          <OverlapNotice effects={effects} inside={inside} start={start} end={end} />
+        ) : null}
 
         {!rangeError ? (
           <section aria-labelledby="days-heading" className="flex flex-col gap-2">
@@ -160,10 +181,55 @@ function PlanEditForm({ plan }: { plan: Plan | null }) {
           disabled={Boolean(rangeError) || allNone || save.isPending}
           className="h-[52px] rounded-full bg-primary text-base font-bold text-white disabled:opacity-50"
         >
-          {save.isPending ? "保存しています…" : "次へ:余り物を入力"}
+          {save.isPending
+            ? "保存しています…"
+            : effects.length > 0
+              ? "置き換えて次へ:余り物を入力"
+              : "次へ:余り物を入力"}
         </button>
       </footer>
     </div>
+  );
+}
+
+function OverlapNotice({
+  effects,
+  inside,
+  start,
+  end,
+}: {
+  effects: ReturnType<typeof overlapEffects<Plan>>;
+  inside: Plan | null;
+  start: string;
+  end: string;
+}) {
+  const period = (p: Plan) => `${formatIsoShort(p.start_date)}〜${formatIsoShort(p.end_date)}`;
+  return (
+    <section
+      role="alert"
+      className="flex flex-col gap-2.5 rounded-2xl border border-[#EBC3B6] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+    >
+      <p className="font-bold">すでにある献立と期間が重なっています</p>
+      <ul className="flex flex-col gap-1">
+        {effects.map((e) => (
+          <li key={e.plan.id}>
+            {e.kind === "trim"
+              ? `${period(e.plan)}の献立は${formatIsoShort(e.keepUntil)}までになり、${formatIsoShort(e.dropFrom)}〜${formatIsoShort(e.plan.end_date)}の献立はなくなります`
+              : `${period(e.plan)}の献立はなくなり、新しい献立に置き換わります`}
+          </li>
+        ))}
+      </ul>
+      {inside ? (
+        <Link
+          to={`/plans/${inside.id}/proposal${start === end ? `?day=${start}` : ""}`}
+          className="flex min-h-11 items-center justify-center rounded-full bg-surface px-4 text-sm font-bold text-primary"
+        >
+          {start === end
+            ? `${formatIsoShort(start)}だけ作り直す(ほかの日はそのまま)`
+            : `${formatIsoShort(start)}〜${formatIsoShort(end)}の献立を開いて入れ替える`}
+        </Link>
+      ) : null}
+    </section>
   );
 }
 

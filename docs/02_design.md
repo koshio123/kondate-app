@@ -256,6 +256,7 @@ create policy "household access" on meal_plan_days
 |---|---|
 | members, member_food_restrictions, household_settings | CRUD(S8)。制限は `(member_id, label)` で upsert し、食材マスタの名前・別名に一致すれば `ingredient_id` を付ける(献立生成で表記ゆれも判定するため)。画面では同じ食材を1つにまとめ、家族のうち最も厳しい種類で表示する |
 | meal_plans, meal_plan_days | `save_plan_draft` RPC で期間と日ごとのモードを1トランザクションで作成・変更。決定(status = confirmed) |
+| (期間の重なり) | **1つの日付に献立は1つ**。`save_plan_draft` の最後に `claim_plan_dates` を呼び、期間が重なるほかの計画を、新しい計画より前に始まるものは前日までに短縮(以降の日は削除)、期間内に始まるものは `archived` にする。S2 は保存前に影響を表示し、1つの計画の中に収まるときは「その日だけ作り直す」(S4 の再提案)を案内する。短縮された決定済みの計画は買い物リストを作り直す |
 | leftovers | CRUD |
 | recipes | お気に入り・評価・メモの更新、手動登録 |
 | planned_dishes | `swap_planned_dish` RPC でお気に入りの料理に差し替え(提案中・決定済みの計画) |
