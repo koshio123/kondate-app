@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>計画作成</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&amp;family=Zen+Maru+Gothic:wght@500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#B4501F}a:hover{color:#8E3E17}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBF5EC; color: #2A211B; font-family: 'BIZ UDPGothic', sans-serif; overflow: hidden">
+
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 8px">
+    <a href="Main.dc.html" aria-label="戻る" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #2A211B">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <h1 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 18px">献立を計画する</h1>
+    <span style="margin-left: auto; padding-right: 12px; font-size: 13px; color: #6E6157">1 / 2</span>
+  </header>
+
+  <main style="flex-grow: 1; padding: 4px 20px 16px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+
+    <section aria-label="期間" style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 14px; font-weight: 700; color: #6E6157">期間</h2>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <button type="button" style="flex: 1; height: 52px; border-radius: 14px; border: 1px solid #EADCCB; background: #FFFFFF; font-family: inherit; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 14px; cursor: pointer; color: #2A211B">
+          <span style="font-size: 11px; color: #6E6157">開始日</span>
+          <span style="font-size: 16px; font-weight: 700">10/13(火)</span>
+        </button>
+        <span aria-hidden="true" style="color: #6E6157">〜</span>
+        <button type="button" style="flex: 1; height: 52px; border-radius: 14px; border: 1px solid #EADCCB; background: #FFFFFF; font-family: inherit; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 14px; cursor: pointer; color: #2A211B">
+          <span style="font-size: 11px; color: #6E6157">終了日</span>
+          <span style="font-size: 16px; font-weight: 700">10/17(土)</span>
+        </button>
+      </div>
+      <p style="margin: 0; font-size: 12px; color: #6E6157">最大10日まで計画できます</p>
+    </section>
+
+    <section aria-label="日ごとの設定" style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 14px; font-weight: 700; color: #6E6157">日ごとの設定</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{days}}" as="day" hint-placeholder-count="5">
+          <div style="background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 16px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <span style="font-size: 15px; font-weight: 700">{{day.label}}</span>
+              <span style="font-size: 12px; color: #6E6157">{{day.hint}}</span>
+            </div>
+            <div role="group" aria-label="{{day.label}}のモード" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; background: #F5EEE5; border-radius: 999px; padding: 4px">
+              <sc-for list="{{day.options}}" as="opt" hint-placeholder-count="3">
+                <button type="button" aria-pressed="{{opt.selected}}" onClick="{{opt.pick}}" style="{{opt.style}}">{{opt.label}}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+
+  <footer style="flex-shrink: 0; padding: 12px 20px 24px; background: #FFFFFF; border-top: 1px solid #EADCCB; display: flex; flex-direction: column; gap: 10px">
+    <div style="font-size: 13px; color: #6E6157; text-align: center">{{summary}}</div>
+    <a href="Leftovers.dc.html" style="height: 52px; border-radius: 999px; background: #B4501F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 16px; font-weight: 700; text-decoration: none">
+      次へ：余り物を入力
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg>
+    </a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"quickMinutes":{"editor":"int","default":15,"min":5,"max":60,"unit":"分"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { modes: { d13: 'normal', d14: 'quick', d15: 'none', d16: 'normal', d17: 'normal' } };
+  }
+  renderVals() {
+    const quick = this.props.quickMinutes ?? 15;
+    const defs = [
+      { key: 'd13', label: '10/13(火)' },
+      { key: 'd14', label: '10/14(水)' },
+      { key: 'd15', label: '10/15(木)' },
+      { key: 'd16', label: '10/16(金)' },
+      { key: 'd17', label: '10/17(土)' }
+    ];
+    const opts = [
+      { mode: 'normal', label: '通常', bg: '#B4501F' },
+      { mode: 'quick', label: '時短', bg: '#2D6A86' },
+      { mode: 'none', label: 'なし', bg: '#5F544B' }
+    ];
+    const hints = { normal: '主食・主菜・副菜・汁物', quick: quick + '分以内・品数は柔軟', none: '献立・買い物の対象外' };
+    const base = 'height: 40px; border: none; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;';
+    const modes = this.state.modes;
+    const days = defs.map((d) => ({
+      label: d.label,
+      hint: hints[modes[d.key]],
+      options: opts.map((o) => {
+        const selected = modes[d.key] === o.mode;
+        return {
+          label: o.label,
+          selected: selected ? 'true' : 'false',
+          style: base + (selected ? ' background: ' + o.bg + '; color: #FFFFFF;' : ' background: transparent; color: #6E6157;'),
+          pick: () => this.setState({ modes: Object.assign({}, modes, { [d.key]: o.mode }) })
+        };
+      })
+    }));
+    const vals = Object.values(modes);
+    const count = (m) => vals.filter((v) => v === m).length;
+    const summary = '通常 ' + count('normal') + '日・時短 ' + count('quick') + '日・なし ' + count('none') + '日';
+    return { days, summary };
+  }
+}
+</script>
+</body>
+</html>

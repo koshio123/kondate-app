@@ -1,134 +1,126 @@
 # kondate-app
 
-家族向けの夕食献立アプリ。指定期間の献立提案、余り物の活用、売り場ジャンル別の買い物リスト、お気に入り保存、根拠付きの栄養アドバイスを提供する。
+家族2人で使う夕食の献立アプリ(スマホ向け PWA)。
+
+- 期間(最大10日)と日ごとのモード(通常 / 時短 / なし)を決めると、Claude が献立を提案
+- 余り物は期間の前半で使い切る。アレルギー・苦手な食材は家族全員分を考慮
+- 日ごと・品ごとの再提案、お気に入りからの差し替え、献立の削除
+- 売り場順の買い物リスト。2台でチェックを共有し、電波がなくても使える
+- お気に入り(★評価・メモ・検索)、家族と食べられないものの設定
+
+## 画面
+
+| S0 ログイン                             | S1 ホーム                              | S2 計画作成                                   |
+| --------------------------------------- | -------------------------------------- | --------------------------------------------- |
+| ![S0](docs/design/screens/s0-login.png) | ![S1](docs/design/screens/s1-main.png) | ![S2](docs/design/screens/s2-plan-create.png) |
+
+| S3 余り物入力                               | S4 献立提案の確認                          | S5 料理詳細                                   |
+| ------------------------------------------- | ------------------------------------------ | --------------------------------------------- |
+| ![S3](docs/design/screens/s3-leftovers.png) | ![S4](docs/design/screens/s4-proposal.png) | ![S5](docs/design/screens/s5-dish-detail.png) |
+
+| S6 買い物リスト                            | S7 お気に入り                               | S8 設定                                    |
+| ------------------------------------------ | ------------------------------------------- | ------------------------------------------ |
+| ![S6](docs/design/screens/s6-shopping.png) | ![S7](docs/design/screens/s7-favorites.png) | ![S8](docs/design/screens/s8-settings.png) |
+
+画面デザイン(Claude Design)の画像。詳細は [docs/design/](docs/design/README.md)。
 
 ## ドキュメント
 
-| #   | フェーズ                                        | ファイル                                                   | 状態       |
-| --- | ----------------------------------------------- | ---------------------------------------------------------- | ---------- |
-| ②   | 要件定義                                        | [docs/01_requirements.md](docs/01_requirements.md)         | 完了(v0.3) |
-| ③   | 設計(画面遷移・データモデル・API・画面デザイン) | [docs/02_design.md](docs/02_design.md)                     | 完了(v0.3) |
-| ④   | 技術選定                                        | [docs/03_tech_stack.md](docs/03_tech_stack.md)             | 完了(v0.2) |
-| ⑤   | 実装                                            | このリポジトリ                                             | 進行中     |
-| -   | 献立生成のモデル比較                            | [docs/04_model_evaluation.md](docs/04_model_evaluation.md) | 記録       |
+| ファイル                                                   | 内容                                        |
+| ---------------------------------------------------------- | ------------------------------------------- |
+| [docs/01_requirements.md](docs/01_requirements.md)         | 要件定義                                    |
+| [docs/02_design.md](docs/02_design.md)                     | 設計(画面・データモデル・API・生成処理・UI) |
+| [docs/design/](docs/design/README.md)                      | 画面デザイン(Claude Design)                 |
+| [docs/03_tech_stack.md](docs/03_tech_stack.md)             | 技術選定                                    |
+| [docs/04_model_evaluation.md](docs/04_model_evaluation.md) | 献立生成のモデル比較                        |
 
 ## 構成
 
 ```
-apps/web/        React + Vite + TypeScript の PWA (Tailwind CSS, TanStack Query, React Router)
+apps/web/            React + Vite + TypeScript の PWA(Tailwind CSS, TanStack Query, React Router)
 packages/plan-eval/  献立生成プロンプトのモデル比較ツール
-supabase/        Supabase のローカル設定、マイグレーション、seed、RLS テスト (pgTAP)
-.github/         CI (lint / typecheck / test / build / RLS テスト)、Supabase の keep-alive
-docs/            要件定義・設計・技術選定
+supabase/
+  migrations/        テーブル、RLS、権限、RPC
+  functions/         Edge Functions: generate-plan(献立生成), regenerate(日・品の再提案)
+  tests/database/    pgTAP テスト
+.github/workflows/   CI と Supabase の keep-alive
 ```
 
-## 開発環境のセットアップ
+## ローカル開発
 
-必要なもの: Node.js 22、pnpm 10 (`corepack enable`)、Docker(Supabase のローカル起動に使用)
+必要なもの: Node.js 22、pnpm 10(`corepack enable`)、Docker
 
 ```bash
 pnpm install
+pnpm db:start                                   # Supabase を起動(初回は数分)
+cp apps/web/.env.example apps/web/.env.local    # pnpm exec supabase status -o env の API_URL / ANON_KEY を記入
+cp supabase/functions/.env.example supabase/functions/.env   # ANTHROPIC_API_KEY を記入
 
-# ローカルの Supabase (DB / Auth / メール確認画面) を起動
-pnpm db:start
-# 表示された "API URL" と "anon key" を apps/web/.env.local に設定
-cp apps/web/.env.example apps/web/.env.local
-
-pnpm dev        # http://127.0.0.1:5173
+pnpm functions:serve   # ターミナル1: Edge Functions
+pnpm dev               # ターミナル2: http://127.0.0.1:5173 (localhost ではなく 127.0.0.1 で開く)
 ```
 
-ローカルでは Google ログインの代わりに、ログイン画面下部の「開発用: メールでログイン」を使う。
-`ken@example.com` か `partner@example.com`(seed の許可リスト)を入力し、
-http://127.0.0.1:54324 に届いたメールのリンクを開く。
+ログインは画面下部の「開発用: メールでログイン」に `ken@example.com` か `partner@example.com` を入れ、
+http://127.0.0.1:54324 に届いたメールのリンクを開く。マイグレーションを取り込んだら `pnpm db:reset`。
 
-### よく使うコマンド
+| コマンド                                     | 内容                                                         |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 静的解析・型チェック・単体テスト                             |
+| `pnpm build`                                 | 本番ビルド                                                   |
+| `pnpm db:reset`                              | マイグレーションと seed をやり直す(ローカルのデータは消える) |
+| `pnpm db:test`                               | DB のテスト(RLS・権限・RPC)                                  |
+| `pnpm db:types`                              | `apps/web/src/types/database.ts` を再生成                    |
+| `pnpm eval:plan --dry-run`                   | モデル比較ツール(`packages/plan-eval/.env` に API キー)      |
 
-| コマンド                                     | 内容                                                                   |
-| -------------------------------------------- | ---------------------------------------------------------------------- |
-| `pnpm dev`                                   | 開発サーバー                                                           |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 静的解析・型チェック・単体テスト                                       |
-| `pnpm build`                                 | 本番ビルド(PWA の Service Worker を含む)                               |
-| `pnpm db:reset`                              | マイグレーションと seed をやり直す                                     |
-| `pnpm db:test`                               | RLS のテスト(`supabase/tests`)                                         |
-| `pnpm db:types`                              | DB スキーマから `apps/web/src/types/database.ts` を再生成              |
-| `pnpm functions:serve`                       | Edge Functions をローカルで起動(`supabase/functions/.env` に API キー) |
-
-## 献立生成のモデル比較
-
-献立生成の中核(プロンプト・出力スキーマ・ルール検証・再生成)は
-`supabase/functions/_shared/plan/` にあり、Edge Function と比較ツールの両方から使う。
-
-```bash
-cp packages/plan-eval/.env.example packages/plan-eval/.env   # ANTHROPIC_API_KEY を記入
-pnpm eval:plan --dry-run                         # プロンプトの確認のみ(API を呼ばない)
-pnpm eval:plan                                   # 2段階生成で Sonnet / Haiku / Opus x 3シナリオ
-pnpm eval:plan --models sonnet --strategy both   # 一括生成と2段階生成の比較
-```
-
-結果は `packages/plan-eval/results/<日時>/report.md` に出力される(git 管理外)。
-1回の実行(3モデル x 3シナリオ)の API 費用は概算で 100 円前後(大半は Opus 分)。
-前回の結果と判断は [docs/04_model_evaluation.md](docs/04_model_evaluation.md)。
-
-## 本番環境の準備
+## 本番環境
 
 フロントエンドは Vercel、バックエンドは Supabase(無料プラン)。
-`<ref>` は Supabase のプロジェクト ID、`<app>` は Vercel のプロジェクト名(URL は `https://<app>.vercel.app`)。
+`<ref>` は Supabase のプロジェクト ID、`<app>` は Vercel の URL(`https://<app>.vercel.app`)。
 
-### 1. Supabase
+### 初回の準備
+
+1. **Supabase**: プロジェクト作成時の Security は「Enable Data API」オン、「Automatically expose new tables」オフ、
+   「Enable automatic RLS」オン(テーブルの権限はマイグレーションで付与する)
+
+   ```bash
+   pnpm exec supabase login
+   pnpm exec supabase link --project-ref <ref>
+   pnpm exec supabase db push
+   pnpm exec supabase secrets set ANTHROPIC_API_KEY=<key>
+   pnpm exec supabase functions deploy generate-plan
+   pnpm exec supabase functions deploy regenerate
+   ```
+
+2. **Google ログイン**
+   - Google Cloud: OAuth 同意画面(外部)で2人の Gmail をテストユーザーに追加。OAuth クライアント ID(ウェブアプリ)の
+     リダイレクト URI は `https://<ref>.supabase.co/auth/v1/callback`
+   - Supabase の Google プロバイダ: クライアント ID とシークレットを設定
+   - Supabase の URL Configuration: Site URL `https://<app>.vercel.app`、Redirect URLs `https://<app>.vercel.app/auth/callback`
+     (`https://` を付ける。末尾スラッシュなし)
+
+3. **世帯と許可リスト**(SQL Editor。メールアドレスは Google ログインで返る表記と完全一致・小文字)
+
+   ```sql
+   with h as (insert into households (name) values ('うち') returning id),
+        a as (insert into household_members (household_id, email, display_name)
+              select id, x.email, x.name from h,
+                (values ('<Ken の Gmail>', 'Ken'), ('<パートナーの Gmail>', 'パートナー')) as x(email, name)),
+        m as (insert into members (household_id, name)
+              select id, x.name from h, (values ('Ken'), ('パートナー')) as x(name))
+   insert into household_settings (household_id) select id from h;
+   ```
+
+4. **Vercel**: GitHub のリポジトリを Import(ビルド設定は `vercel.json`)。環境変数は
+   `VITE_SUPABASE_URL=https://<ref>.supabase.co`、`VITE_SUPABASE_ANON_KEY=<anon キー>`、`ENABLE_EXPERIMENTAL_COREPACK=1`
+
+5. **GitHub**: Repository secrets に `SUPABASE_URL` と `SUPABASE_ANON_KEY`(keep-alive が週2回 DB に触れ、一時停止を防ぐ)
+
+6. **スマホ**: iPhone は Safari の共有 →「ホーム画面に追加」、Android は Chrome のメニュー →「アプリをインストール」
+
+### 更新のデプロイ
 
 ```bash
-pnpm exec supabase login
-pnpm exec supabase link --project-ref <ref>
-pnpm exec supabase db push                      # マイグレーションを適用(seed は入らない)
-pnpm exec supabase secrets set ANTHROPIC_API_KEY=<key>
-pnpm exec supabase functions deploy generate-plan
-pnpm exec supabase functions deploy regenerate
+git push                                         # Vercel が自動でデプロイ
+pnpm exec supabase db push                       # マイグレーションを追加したとき
+pnpm exec supabase functions deploy <name>       # supabase/functions を変えたとき
 ```
-
-### 2. Google ログイン
-
-1. Google Cloud Console で OAuth 同意画面(外部)を作り、2人の Gmail をテストユーザーに追加
-2. OAuth クライアント ID(ウェブアプリ)を作成。承認済みのリダイレクト URI は `https://<ref>.supabase.co/auth/v1/callback`
-3. Supabase の Authentication > Sign In / Providers > Google にクライアント ID とシークレットを設定
-4. Supabase の Authentication > URL Configuration
-   - Site URL: `https://<app>.vercel.app`
-   - Redirect URLs: `https://<app>.vercel.app/auth/callback`
-
-### 3. 世帯と許可リスト(SQL Editor)
-
-メールアドレスは小文字で。食べる人(`members`)は後からアプリの設定画面でも変更できる。
-
-```sql
-with h as (insert into households (name) values ('うち') returning id),
-     a as (insert into household_members (household_id, email, display_name)
-           select id, x.email, x.name from h,
-             (values ('<Ken の Gmail>', 'Ken'), ('<パートナーの Gmail>', 'パートナー')) as x(email, name)),
-     m as (insert into members (household_id, name)
-           select id, x.name from h, (values ('Ken'), ('パートナー')) as x(name))
-insert into household_settings (household_id) select id from h;
-```
-
-### 4. Vercel
-
-Add New > Project で GitHub の `koshio123/kondate-app` を Import する。ビルドの設定はリポジトリ直下の
-`vercel.json` にあるので、Root Directory は既定(`./`)のまま、Framework Preset も変更しない。
-
-| 環境変数                       | 値                                                               |
-| ------------------------------ | ---------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`            | `https://<ref>.supabase.co`                                      |
-| `VITE_SUPABASE_ANON_KEY`       | Supabase の anon(publishable)キー                                |
-| `ENABLE_EXPERIMENTAL_COREPACK` | `1`(`package.json` の `packageManager` と同じ pnpm でビルドする) |
-
-`main` に push すると本番に自動でデプロイされる。`vercel.json` の rewrites で、`/shopping` などへの
-直接アクセスにも `index.html` を返す(SPA)。Service Worker(`sw.js`)はキャッシュさせず、更新がすぐ届くようにしている。
-
-### 5. GitHub Actions
-
-Repository secrets に `SUPABASE_URL` と `SUPABASE_ANON_KEY` を登録(keep-alive が週2回 DB に触れ、無料プランの一時停止を防ぐ)。
-
-### 6. スマホに入れる
-
-- iPhone: Safari で開く → 共有 → 「ホーム画面に追加」
-- Android: Chrome で開く → メニュー → 「アプリをインストール」(または「ホーム画面に追加」)
-
-ホーム画面から開くとアプリとして全画面で動き、買い物リストは電波がなくても開ける。

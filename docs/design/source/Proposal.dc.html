@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>献立提案の確認</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&amp;family=Zen+Maru+Gothic:wght@500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#B4501F}a:hover{color:#8E3E17}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBF5EC; color: #2A211B; font-family: 'BIZ UDPGothic', sans-serif; overflow: hidden">
+
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 8px">
+    <a href="Leftovers.dc.html" aria-label="戻る" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #2A211B">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <h1 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 18px">献立の提案</h1>
+  </header>
+
+  <main style="flex-grow: 1; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+    <p style="margin: 0 4px; font-size: 13px; line-height: 1.6; color: #6E6157">気になる品は <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -2px"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg> で入れ替えられます</p>
+
+    <section aria-label="10/13(火)" style="background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 18px; padding: 12px 6px 8px 14px; display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: center; gap: 8px; padding-right: 6px; margin-bottom: 4px">
+        <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 16px">10/13(火)</span>
+        <span style="font-size: 11px; font-weight: 700; color: #FFFFFF; background: #B4501F; border-radius: 999px; padding: 2px 8px">通常</span>
+        <span style="font-size: 11px; color: #3F6A2A; background: #E4EFD9; border-radius: 999px; padding: 2px 8px">余り物を使用</span>
+        <button type="button" style="margin-left: auto; height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid #D9CBB9; background: transparent; font-family: inherit; font-size: 12px; color: #6E6157; cursor: pointer">この日を再提案</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">主菜</span>
+        <a href="DishDetail.dc.html" style="flex-grow: 1; font-size: 15px; font-weight: 700; color: #2A211B; text-decoration: none">豚こまとキャベツの味噌炒め</a>
+        <span style="font-size: 12px; color: #6E6157">20分</span>
+        <button type="button" aria-label="主菜を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">副菜</span>
+        <span style="flex-grow: 1; font-size: 15px">しめじと小松菜のおひたし</span>
+        <span style="font-size: 12px; color: #6E6157">10分</span>
+        <button type="button" aria-label="副菜を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">汁物</span>
+        <span style="flex-grow: 1; font-size: 15px">豆腐とわかめの味噌汁</span>
+        <span style="font-size: 12px; color: #6E6157">10分</span>
+        <button type="button" aria-label="汁物を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; min-height: 36px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">主食</span>
+        <span style="flex-grow: 1; font-size: 15px">ご飯</span>
+      </div>
+    </section>
+
+    <section aria-label="10/14(水)" style="background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 18px; padding: 12px 6px 8px 14px; display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: center; gap: 8px; padding-right: 6px; margin-bottom: 4px">
+        <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 16px">10/14(水)</span>
+        <span style="font-size: 11px; font-weight: 700; color: #FFFFFF; background: #2D6A86; border-radius: 999px; padding: 2px 8px">時短</span>
+        <span style="font-size: 12px; font-weight: 700; color: #2D6A86">合計15分</span>
+        <button type="button" style="margin-left: auto; height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid #D9CBB9; background: transparent; font-family: inherit; font-size: 12px; color: #6E6157; cursor: pointer">この日を再提案</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">一品</span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 700">親子丼</span>
+        <span style="font-size: 12px; color: #6E6157">12分</span>
+        <button type="button" aria-label="一品料理を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">副菜</span>
+        <span style="flex-grow: 1; font-size: 15px">レンジもやしのナムル</span>
+        <span style="font-size: 12px; color: #6E6157">3分</span>
+        <button type="button" aria-label="副菜を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+    </section>
+
+    <section aria-label="10/15(木)" style="background: #F5EEE5; border-radius: 18px; padding: 14px; display: flex; align-items: center; gap: 8px">
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 16px; color: #6E6157">10/15(木)</span>
+      <span style="font-size: 11px; font-weight: 700; color: #FFFFFF; background: #5F544B; border-radius: 999px; padding: 2px 8px">なし</span>
+      <span style="font-size: 13px; color: #6E6157">献立なし</span>
+    </section>
+
+    <section aria-label="10/16(金)" style="background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 18px; padding: 12px 6px 8px 14px; display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: center; gap: 8px; padding-right: 6px; margin-bottom: 4px">
+        <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 16px">10/16(金)</span>
+        <span style="font-size: 11px; font-weight: 700; color: #FFFFFF; background: #B4501F; border-radius: 999px; padding: 2px 8px">通常</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; flex-shrink: 0; font-size: 12px; color: #6E6157">主菜</span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 700">鶏の照り焼き</span>
+        <span style="font-size: 12px; color: #6E6157">25分</span>
+        <button type="button" aria-label="主菜を再提案" style="width: 44px; height: 44px; border: none; background: transparent; color: #B4501F; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg></button>
+      </div>
+    </section>
+  </main>
+
+  <footer style="flex-shrink: 0; padding: 12px 20px 24px; background: #FFFFFF; border-top: 1px solid #EADCCB; display: flex; flex-direction: column; gap: 8px">
+    <a href="Shopping.dc.html" style="height: 52px; border-radius: 999px; background: #B4501F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700; text-decoration: none">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+      決定して買い物リストを作る
+    </a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>買い物リスト</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&amp;family=Zen+Maru+Gothic:wght@500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#B4501F}a:hover{color:#8E3E17}
+input[type=checkbox]{accent-color:#B4501F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBF5EC; color: #2A211B; font-family: 'BIZ UDPGothic', sans-serif; overflow: hidden">
+
+  <header style="padding: 20px 20px 12px; display: flex; flex-direction: column; gap: 10px; background: #FBF5EC">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <h1 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 24px">買い物リスト</h1>
+        <span style="font-size: 13px; color: #6E6157">10/13〜10/17・4日分</span>
+      </div>
+      <button type="button" style="height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid #D9CBB9; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #2A211B; cursor: pointer">＋ 追加</button>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="flex-grow: 1; height: 8px; background: #EFE4D6; border-radius: 999px; overflow: hidden"><div style="{{barStyle}}"></div></div>
+      <span style="font-size: 13px; font-weight: 700">{{progress}}</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #3F6A2A">
+      <span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: #3F6A2A"></span>2人で共有中・オフラインでも使えます
+    </div>
+  </header>
+
+  <main style="flex-grow: 1; min-height: 0; padding: 0 16px 12px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto">
+    <sc-for list="{{sections}}" as="sec" hint-placeholder-count="3">
+      <section aria-label="{{sec.name}}" style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0 4px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #6E6157"><span>{{sec.name}}</span><span style="font-weight: 400">{{sec.count}}</span></h2>
+        <ul style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 16px; overflow: hidden">
+          <sc-for list="{{sec.items}}" as="item" hint-placeholder-count="3">
+            <li style="border-bottom: 1px solid #F1E7DA">
+              <label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 14px; box-sizing: border-box; cursor: pointer">
+                <input type="checkbox" checked="{{item.checked}}" onChange="{{item.toggle}}" style="width: 22px; height: 22px; margin: 0; flex-shrink: 0">
+                <span style="{{item.nameStyle}}">{{item.name}}</span>
+                <span style="{{item.amountStyle}}">{{item.amount}}</span>
+              </label>
+              <sc-if value="{{item.note}}" hint-placeholder-val="{{ false }}">
+                <div style="margin: -6px 14px 8px 48px; font-size: 12px; color: #3F6A2A">{{item.note}}</div>
+              </sc-if>
+            </li>
+          </sc-for>
+        </ul>
+      </section>
+    </sc-for>
+  </main>
+
+  <nav aria-label="メインメニュー" style="height: 76px; flex-shrink: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #EADCCB; padding-bottom: 8px; box-sizing: border-box">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #6E6157; font-size: 11px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"></path></svg>ホーム</a>
+    <a href="Shopping.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #B4501F; font-size: 11px; font-weight: 700">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"></path><circle cx="10" cy="20.5" r="1"></circle><circle cx="17" cy="20.5" r="1"></circle></svg>買い物</a>
+    <a href="Favorites.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #6E6157; font-size: 11px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg>お気に入り</a>
+    <a href="Settings.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #6E6157; font-size: 11px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>設定</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { checked: { v1: true, v2: true, v4: true, m1: true, p1: true, p2: true } };
+  }
+  renderVals() {
+    const data = [
+      { name: '野菜・果物', items: [
+        { id: 'v1', name: 'ピーマン', amount: '2個' },
+        { id: 'v2', name: '小松菜', amount: '1束' },
+        { id: 'v3', name: 'もやし', amount: '1袋' },
+        { id: 'v4', name: '玉ねぎ', amount: '1個' },
+        { id: 'v5', name: '長ねぎ', amount: '1本' },
+        { id: 'v6', name: 'きゅうり', amount: '2本' },
+        { id: 'v7', name: 'トマト', amount: '1個' }
+      ] },
+      { name: '肉', items: [
+        { id: 'm1', name: '鶏もも肉', amount: '600g', note: '親子丼・照り焼きの2品分' },
+        { id: 'm2', name: '豚ひき肉', amount: '150g' }
+      ] },
+      { name: '卵・乳製品', items: [
+        { id: 'e1', name: '卵', amount: '2個', note: '必要5個のうち3個は家にあり' }
+      ] },
+      { name: '豆腐・練り物', items: [
+        { id: 't1', name: '絹ごし豆腐', amount: '2丁', note: '味噌汁・麻婆豆腐の2品分' }
+      ] },
+      { name: '調味料・乾物', items: [
+        { id: 's1', name: '乾燥わかめ', amount: '1袋' },
+        { id: 's2', name: '豆板醤', amount: '1本' }
+      ] },
+      { name: '常備品(家にあるか確認)', items: [
+        { id: 'p1', name: '味噌', amount: '' },
+        { id: 'p2', name: '醤油', amount: '' },
+        { id: 'p3', name: 'みりん', amount: '' },
+        { id: 'p4', name: 'ごま油', amount: '' },
+        { id: 'p5', name: '鶏がらスープの素', amount: '' },
+        { id: 'p6', name: '片栗粉', amount: '' }
+      ] }
+    ];
+    const checked = this.state.checked;
+    let total = 0;
+    let done = 0;
+    const sections = data.map((sec) => {
+      const items = sec.items.map((it) => {
+        const isChecked = !!checked[it.id];
+        total += 1;
+        if (isChecked) done += 1;
+        return {
+          name: it.name,
+          amount: it.amount,
+          note: it.note || '',
+          checked: isChecked,
+          nameStyle: 'flex-grow: 1; font-size: 16px;' + (isChecked ? ' color: #9A8D80; text-decoration: line-through;' : ' color: #2A211B;'),
+          amountStyle: 'font-size: 14px;' + (isChecked ? ' color: #9A8D80;' : ' color: #6E6157;'),
+          toggle: () => this.setState({ checked: Object.assign({}, checked, { [it.id]: !isChecked }) })
+        };
+      });
+      const secDone = items.filter((i) => i.checked).length;
+      return { name: sec.name, count: secDone + ' / ' + items.length, items };
+    });
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return {
+      sections,
+      progress: done + ' / ' + total + ' 品',
+      barStyle: 'width: ' + pct + '%; height: 8px; background: #B4501F; border-radius: 999px;'
+    };
+  }
+}
+</script>
+</body>
+</html>

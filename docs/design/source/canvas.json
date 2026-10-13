@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-12T07:15:00Z" },
+  "title": "献立アプリ 画面デザイン",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Login.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "S0 ログイン" },
+    "Main.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "S1 ホーム" },
+    "PlanCreate.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "S2 計画作成", "is_interactive": true },
+    "Leftovers.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "S3 余り物入力" },
+    "Proposal.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "S4 献立提案の確認" },
+    "DishDetail.dc.html": { "x": 0, "y": 1244, "w": 390, "h": 844, "title": "S5 料理詳細" },
+    "Shopping.dc.html": { "x": 470, "y": 1244, "w": 390, "h": 844, "title": "S6 買い物リスト", "is_interactive": true },
+    "Favorites.dc.html": { "x": 940, "y": 1244, "w": 390, "h": 844, "title": "S7 お気に入り" },
+    "Settings.dc.html": { "x": 1410, "y": 1244, "w": 390, "h": 844, "title": "S8 設定" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Login.dc.html",
+    "PlanCreate.dc.html",
+    "Leftovers.dc.html",
+    "Proposal.dc.html",
+    "DishDetail.dc.html",
+    "Shopping.dc.html",
+    "Favorites.dc.html",
+    "Settings.dc.html"
+  ],
+  "notes": {
+    "row1": { "x": 0, "y": -300, "text": "献立を計画する流れ", "kind": "title1", "maxW": 2270 },
+    "row2": { "x": 0, "y": 944, "text": "買い物・保存・設定", "kind": "title1", "maxW": 1800 }
+  },
+  "designSystems": []
+}

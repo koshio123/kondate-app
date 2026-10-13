@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>余り物入力</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&amp;family=Zen+Maru+Gothic:wght@500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#B4501F}a:hover{color:#8E3E17}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FBF5EC; color: #2A211B; font-family: 'BIZ UDPGothic', sans-serif; overflow: hidden">
+
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 8px">
+    <a href="PlanCreate.dc.html" aria-label="戻る" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #2A211B">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <h1 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 18px">冷蔵庫の余り物</h1>
+    <span style="margin-left: auto; padding-right: 12px; font-size: 13px; color: #6E6157">2 / 2</span>
+  </header>
+
+  <main style="flex-grow: 1; padding: 4px 20px 16px; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+    <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #6E6157">使い切りたい食材を入れると、期間の前半の献立で優先して使います。</p>
+
+    <section aria-label="余り物" style="display: flex; flex-direction: column; gap: 10px">
+      <label for="leftover-input" style="font-size: 14px; font-weight: 700; color: #6E6157">食材を追加</label>
+      <div style="display: flex; gap: 8px">
+        <input id="leftover-input" type="text" placeholder="例：にんじん 1本" style="flex-grow: 1; min-width: 0; height: 48px; box-sizing: border-box; border-radius: 14px; border: 1px solid #D9CBB9; background: #FFFFFF; padding: 0 14px; font-family: inherit; font-size: 16px; color: #2A211B">
+        <button type="button" aria-label="追加" style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 14px; border: none; background: #B4501F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+        </button>
+      </div>
+
+      <ul aria-label="入力済みの余り物" style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border: 1px solid #EADCCB; border-radius: 16px; display: flex; flex-direction: column">
+        <li style="display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; border-bottom: 1px solid #F1E7DA">
+          <span style="flex-grow: 1; font-size: 15px">キャベツ</span><span style="font-size: 14px; color: #6E6157">1/2玉</span>
+          <button type="button" aria-label="キャベツを削除" style="width: 44px; height: 44px; border: none; background: transparent; color: #6E6157; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; border-bottom: 1px solid #F1E7DA">
+          <span style="flex-grow: 1; font-size: 15px">豚こま切れ肉</span><span style="font-size: 14px; color: #6E6157">150g</span>
+          <button type="button" aria-label="豚こま切れ肉を削除" style="width: 44px; height: 44px; border: none; background: transparent; color: #6E6157; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; border-bottom: 1px solid #F1E7DA">
+          <span style="flex-grow: 1; font-size: 15px">卵</span><span style="font-size: 14px; color: #6E6157">3個</span>
+          <button type="button" aria-label="卵を削除" style="width: 44px; height: 44px; border: none; background: transparent; color: #6E6157; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px">
+          <span style="flex-grow: 1; font-size: 15px">しめじ</span><span style="font-size: 14px; color: #6E6157">1袋</span>
+          <button type="button" aria-label="しめじを削除" style="width: 44px; height: 44px; border: none; background: transparent; color: #6E6157; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </li>
+      </ul>
+    </section>
+
+    <section aria-label="前回の買い物から" style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 14px; font-weight: 700; color: #6E6157">前回の買い物で残っていそうなもの</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <button type="button" style="height: 40px; padding: 0 14px; border-radius: 999px; border: 1px dashed #B9A894; background: transparent; font-family: inherit; font-size: 14px; color: #2A211B; cursor: pointer">＋ 長ねぎ</button>
+        <button type="button" style="height: 40px; padding: 0 14px; border-radius: 999px; border: 1px dashed #B9A894; background: transparent; font-family: inherit; font-size: 14px; color: #2A211B; cursor: pointer">＋ にんじん</button>
+        <button type="button" style="height: 40px; padding: 0 14px; border-radius: 999px; border: 1px dashed #B9A894; background: transparent; font-family: inherit; font-size: 14px; color: #2A211B; cursor: pointer">＋ 油揚げ</button>
+      </div>
+    </section>
+
+    <section aria-label="リクエスト" style="display: flex; flex-direction: column; gap: 10px">
+      <label for="request-input" style="font-size: 14px; font-weight: 700; color: #6E6157">リクエスト(任意)</label>
+      <input id="request-input" type="text" placeholder="例：魚料理を1回入れて" style="height: 48px; box-sizing: border-box; border-radius: 14px; border: 1px solid #D9CBB9; background: #FFFFFF; padding: 0 14px; font-family: inherit; font-size: 16px; color: #2A211B">
+    </section>
+  </main>
+
+  <footer style="flex-shrink: 0; padding: 12px 20px 24px; background: #FFFFFF; border-top: 1px solid #EADCCB; display: flex; flex-direction: column; gap: 10px">
+    <a href="Proposal.dc.html" style="height: 52px; border-radius: 999px; background: #B4501F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700; text-decoration: none">
+      献立を提案してもらう
+    </a>
+    <a href="Proposal.dc.html" style="height: 36px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #6E6157">余り物なしで提案する</a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
