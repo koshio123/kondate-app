@@ -4,6 +4,7 @@ import type { DayMode } from "@/components/ModeBadge";
 import { useHousehold } from "@/auth/useHousehold";
 import { supabase } from "./supabase";
 import { toIsoDate } from "./date";
+import { TOGGLE_ITEM_KEY } from "./shoppingList";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -243,6 +244,39 @@ export function useSwapDish() {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["favorites"] });
+    },
+  });
+}
+
+/**
+ * Deletes a plan with its days, dishes and shopping list (delete_meal_plan). Cached copies of
+ * its shopping list and checks still waiting to be sent (made offline) are dropped too.
+ */
+export function useDeletePlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (planId: string) => {
+      const { error } = await supabase.rpc("delete_meal_plan", { p_plan_id: planId });
+      if (error) {
+        throw new Error(
+          error.code === "55006"
+            ? "献立を考えている途中なので、終わってから削除してください。"
+            : "削除できませんでした。電波の良い場所でもう一度お試しください。",
+        );
+      }
+    },
+    onSuccess: (_data, planId) => {
+      const mutations = queryClient.getMutationCache();
+      for (const m of mutations.findAll({ mutationKey: TOGGLE_ITEM_KEY })) {
+        if ((m.state.variables as { planId?: string } | undefined)?.planId === planId) {
+          mutations.remove(m);
+        }
+      }
+      queryClient.removeQueries({ queryKey: ["shopping", planId] });
+      queryClient.removeQueries({ queryKey: ["plan", planId] });
+      void queryClient.invalidateQueries({ queryKey: ["plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["leftovers"] });
       void queryClient.invalidateQueries({ queryKey: ["favorites"] });
     },
   });

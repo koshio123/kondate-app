@@ -1,3 +1,4 @@
+import { DeletePlanButton } from "@/components/DeletePlanButton";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
@@ -141,6 +142,9 @@ function LeftoversForm({ plan }: { plan: Plan }) {
             className="h-12 rounded-2xl border border-[#D9CBB9] bg-surface px-3.5 text-base"
           />
         </section>
+        <div className="mt-2">
+          <DeletePlanButton plan={plan} disabled={start.isPending} />
+        </div>
       </main>
 
       <footer className="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-5 pt-3 pb-[max(24px,env(safe-area-inset-bottom))]">

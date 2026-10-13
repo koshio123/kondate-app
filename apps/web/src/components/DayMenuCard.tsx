@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { formatIsoShort } from "@/lib/date";
 import { COURSE_LABEL, type PlanDay, type PlanDish } from "@/lib/plans";
@@ -19,10 +20,13 @@ export function DayMenuCard({
   day,
   warnings = [],
   edit,
+  action,
 }: {
   day: PlanDay;
   warnings?: string[];
   edit?: DayEditControls;
+  /** Shown at the right of the header when there are no edit controls (S1). */
+  action?: ReactNode;
 }) {
   const label = formatIsoShort(day.date);
 
@@ -52,6 +56,7 @@ export function DayMenuCard({
         <span className={`text-xs ${day.mode === "quick" ? "font-bold text-quick" : "text-muted"}`}>
           合計{total}分
         </span>
+        {!edit && action ? <div className="ml-auto">{action}</div> : null}
         {edit ? (
           <button
             type="button"

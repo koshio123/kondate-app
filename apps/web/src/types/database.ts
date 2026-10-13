@@ -659,7 +659,9 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_plan_dates: { Args: { p_only_older?: boolean; p_plan_id: string }; Returns: undefined };
       claim_plan_generation: { Args: { p_plan_id: string }; Returns: boolean };
+      delete_meal_plan: { Args: { p_plan_id: string }; Returns: undefined };
       delete_unkept_recipes: { Args: { p_recipe_ids: string[] }; Returns: undefined };
       fail_plan_generation: { Args: { p_error: string; p_plan_id: string }; Returns: undefined };
       insert_generated_recipe: {

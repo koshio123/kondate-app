@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
+import { DeletePlanButton } from "@/components/DeletePlanButton";
 import { AppMark, BackIcon, RefreshIcon } from "@/components/icons";
 import { ResuggestSheet, type ResuggestTarget } from "@/components/ResuggestSheet";
 import {
@@ -95,6 +96,7 @@ function NotGenerated({ plan }: { plan: Plan }) {
       <Link to={`/plans/${plan.id}/edit`} className="text-sm text-muted">
         期間や日ごとの設定を変える
       </Link>
+      <DeletePlanButton plan={plan} disabled={start.isPending} />
     </main>
   );
 }
@@ -236,6 +238,7 @@ function Proposal({ plan }: { plan: Plan }) {
             </button>
           </>
         )}
+        <DeletePlanButton plan={plan} disabled={changing || buildList.isPending} />
       </footer>
     </>
   );

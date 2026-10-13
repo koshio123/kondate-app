@@ -116,7 +116,10 @@ function PlanSummary({ plan }: { plan: Plan }) {
           <h2 id="next-heading" className="font-display text-base font-bold">
             {next.date === today ? "今日の夕食" : "次の夕食"}
           </h2>
-          <DayMenuCard day={next} />
+          <DayMenuCard
+            day={next}
+            action={<ResuggestLink plan={plan} date={next.date} mode={next.mode} />}
+          />
         </section>
       ) : null}
       {rest.length > 0 ? (
@@ -125,10 +128,17 @@ function PlanSummary({ plan }: { plan: Plan }) {
             この先の献立
           </h2>
           {rest.map((day) => (
-            <DayMenuCard key={day.id} day={day} />
+            <DayMenuCard
+              key={day.id}
+              day={day}
+              action={<ResuggestLink plan={plan} date={day.date} mode={day.mode} />}
+            />
           ))}
         </section>
       ) : null}
+      <Link to={`/plans/${plan.id}/proposal`} className="self-center py-1 text-sm text-muted">
+        献立全体を見直す・削除する
+      </Link>
     </>
   );
 }
@@ -163,6 +173,19 @@ function LaterPlans({ plans }: { plans: Plan[] }) {
         </Link>
       ))}
     </section>
+  );
+}
+
+/** Opens the plan with the re-suggest sheet of that day (S4). */
+function ResuggestLink({ plan, date, mode }: { plan: Plan; date: string; mode: string }) {
+  if (mode === "none") return null;
+  return (
+    <Link
+      to={`/plans/${plan.id}/proposal?day=${date}`}
+      className="flex h-8 items-center rounded-full border border-[#D9CBB9] px-2.5 text-xs text-muted"
+    >
+      この日を再提案
+    </Link>
   );
 }
 
