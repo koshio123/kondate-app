@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { ChevronRightIcon, SearchIcon } from "@/components/icons";
 import { formatIsoShort } from "@/lib/date";
-import { type FavoriteFilter, filterFavorites, QUICK_MINUTES } from "@/lib/favorites";
+import { type FavoriteFilter, filterFavorites } from "@/lib/favorites";
+import { useQuickMinutes } from "@/lib/familyQuery";
 import { useFavorites } from "@/lib/favoritesQuery";
 import { COURSE_LABEL } from "@/lib/plans";
 
@@ -12,7 +13,7 @@ const FILTERS: { value: FavoriteFilter; label: string }[] = [
   { value: "side", label: "副菜" },
   { value: "soup", label: "汁物" },
   { value: "one_dish", label: "一品" },
-  { value: "quick", label: `${QUICK_MINUTES}分以内` },
+  { value: "quick", label: "時短" },
 ];
 
 /** S7 お気に入り */
@@ -20,8 +21,9 @@ export function FavoritesPage() {
   const favorites = useFavorites();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FavoriteFilter>("all");
+  const quickMinutes = useQuickMinutes();
   const all = favorites.data ?? [];
-  const shown = filterFavorites(all, query, filter);
+  const shown = filterFavorites(all, query, filter, quickMinutes);
 
   return (
     <div className="flex flex-col pb-4">
@@ -53,7 +55,7 @@ export function FavoritesPage() {
                 onClick={() => setFilter(f.value)}
                 className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] ${active ? "bg-ink font-bold text-white" : "border border-[#D9CBB9] bg-surface"}`}
               >
-                {f.label}
+                {f.value === "quick" ? `${quickMinutes}分以内` : f.label}
                 {f.value === "all" && favorites.data ? ` ${all.length}` : ""}
               </button>
             );

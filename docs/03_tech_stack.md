@@ -19,7 +19,7 @@
 | UI | Tailwind CSS + shadcn/ui | 案 |
 | データ取得 | supabase-js + TanStack Query | **決定**(実装済み) |
 | オフライン | Service Worker(Workbox)+ TanStack Query のキャッシュ保存(localStorage)と一時停止したミューテーション | **決定**(2026-10-12。リストは数十行なので IndexedDB は不要と判断) |
-| ホスティング | Cloudflare Pages(静的配信) | 案 |
+| ホスティング | Vercel(Hobby プラン、静的配信、Git 連携で自動デプロイ) | **決定**(2026-10-13。当初案の Cloudflare Pages から変更) |
 | LLM | **Claude Sonnet 5.5(献立生成)+ Claude Haiku 5.5(軽い処理)** | **決定**(2026-10-12。実装初期の比較で最終確認) |
 | データ整備スクリプト | Python(食品成分表の取り込み) | 案 |
 | CI / 定期実行 | GitHub Actions | 案 |
@@ -126,7 +126,7 @@ export async function generatePlan(prompt: string, schema: object) {
 
 | 項目 | サービス | 月額 |
 |---|---|---|
-| フロントエンド配信 | Cloudflare Pages(無料プラン) | 0円 |
+| フロントエンド配信 | Vercel(Hobby プラン、個人・非商用) | 0円 |
 | 認証・DB・同期・Edge Functions | Supabase(無料プラン) | 0円 |
 | LLM | Claude API | 約200円(Sonnet 中心の場合) |
 | CI・定期実行 | GitHub Actions(非公開リポジトリの無料枠) | 0円 |

@@ -15,6 +15,7 @@ export interface Favorite {
 /** "all", a course, or "quick" (fits a quick day on its own). */
 export type FavoriteFilter = "all" | Course | "quick";
 
+/** Default limit of a quick day; the household setting overrides it. */
 export const QUICK_MINUTES = 15;
 
 export interface FavoriteRow {
@@ -65,6 +66,7 @@ export function filterFavorites(
   list: Favorite[],
   query: string,
   filter: FavoriteFilter,
+  quickMinutes = QUICK_MINUTES,
 ): Favorite[] {
   const words = query
     .split(/[\s\u3000]+/)
@@ -72,7 +74,7 @@ export function filterFavorites(
     .filter(Boolean);
   return list.filter((f) => {
     if (
-      filter === "quick" ? f.cook_minutes > QUICK_MINUTES : filter !== "all" && f.course !== filter
+      filter === "quick" ? f.cook_minutes > quickMinutes : filter !== "all" && f.course !== filter
     ) {
       return false;
     }

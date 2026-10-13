@@ -69,26 +69,66 @@ pnpm eval:plan --models sonnet --strategy both   # 一括生成と2段階生成�
 1回の実行(3モデル x 3シナリオ)の API 費用は概算で 100 円前後(大半は Opus 分)。
 前回の結果と判断は [docs/04_model_evaluation.md](docs/04_model_evaluation.md)。
 
-## 本番環境(Supabase)の準備
+## 本番環境の準備
 
-1. Supabase でプロジェクトを作成し、`supabase link --project-ref <ref>` → `supabase db push` でマイグレーションを適用
-2. Google Cloud で OAuth クライアントを作成し、Supabase の Authentication > Providers > Google に設定
-   (承認済みリダイレクト URI は `https://<ref>.supabase.co/auth/v1/callback`)
-3. 世帯と許可リストを SQL Editor で登録する(メールアドレスは小文字で)
+フロントエンドは Vercel、バックエンドは Supabase(無料プラン)。
+`<ref>` は Supabase のプロジェクト ID、`<app>` は Vercel のプロジェクト名(URL は `https://<app>.vercel.app`)。
 
-```sql
-insert into households (name) values ('うち') returning id;
-insert into household_members (household_id, email, display_name) values
-  ('<上の id>', '<Ken の Gmail アドレス>', 'Ken'),
-  ('<上の id>', '<パートナーの Gmail アドレス>', 'パートナー');
-insert into household_settings (household_id) values ('<上の id>');
-```
-
-4. GitHub の Secrets に `SUPABASE_URL` と `SUPABASE_ANON_KEY` を登録(keep-alive 用)
-5. Edge Function のシークレットを登録してデプロイ
+### 1. Supabase
 
 ```bash
-supabase secrets set ANTHROPIC_API_KEY=<key>
-supabase functions deploy generate-plan
-supabase functions deploy regenerate
+pnpm exec supabase login
+pnpm exec supabase link --project-ref <ref>
+pnpm exec supabase db push                      # マイグレーションを適用(seed は入らない)
+pnpm exec supabase secrets set ANTHROPIC_API_KEY=<key>
+pnpm exec supabase functions deploy generate-plan
+pnpm exec supabase functions deploy regenerate
 ```
+
+### 2. Google ログイン
+
+1. Google Cloud Console で OAuth 同意画面(外部)を作り、2人の Gmail をテストユーザーに追加
+2. OAuth クライアント ID(ウェブアプリ)を作成。承認済みのリダイレクト URI は `https://<ref>.supabase.co/auth/v1/callback`
+3. Supabase の Authentication > Sign In / Providers > Google にクライアント ID とシークレットを設定
+4. Supabase の Authentication > URL Configuration
+   - Site URL: `https://<app>.vercel.app`
+   - Redirect URLs: `https://<app>.vercel.app/auth/callback`
+
+### 3. 世帯と許可リスト(SQL Editor)
+
+メールアドレスは小文字で。食べる人(`members`)は後からアプリの設定画面でも変更できる。
+
+```sql
+with h as (insert into households (name) values ('うち') returning id),
+     a as (insert into household_members (household_id, email, display_name)
+           select id, x.email, x.name from h,
+             (values ('<Ken の Gmail>', 'Ken'), ('<パートナーの Gmail>', 'パートナー')) as x(email, name)),
+     m as (insert into members (household_id, name)
+           select id, x.name from h, (values ('Ken'), ('パートナー')) as x(name))
+insert into household_settings (household_id) select id from h;
+```
+
+### 4. Vercel
+
+Add New > Project で GitHub の `koshio123/kondate-app` を Import する。ビルドの設定はリポジトリ直下の
+`vercel.json` にあるので、Root Directory は既定(`./`)のまま、Framework Preset も変更しない。
+
+| 環境変数                       | 値                                                               |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`            | `https://<ref>.supabase.co`                                      |
+| `VITE_SUPABASE_ANON_KEY`       | Supabase の anon(publishable)キー                                |
+| `ENABLE_EXPERIMENTAL_COREPACK` | `1`(`package.json` の `packageManager` と同じ pnpm でビルドする) |
+
+`main` に push すると本番に自動でデプロイされる。`vercel.json` の rewrites で、`/shopping` などへの
+直接アクセスにも `index.html` を返す(SPA)。Service Worker(`sw.js`)はキャッシュさせず、更新がすぐ届くようにしている。
+
+### 5. GitHub Actions
+
+Repository secrets に `SUPABASE_URL` と `SUPABASE_ANON_KEY` を登録(keep-alive が週2回 DB に触れ、無料プランの一時停止を防ぐ)。
+
+### 6. スマホに入れる
+
+- iPhone: Safari で開く → 共有 → 「ホーム画面に追加」
+- Android: Chrome で開く → メニュー → 「アプリをインストール」(または「ホーム画面に追加」)
+
+ホーム画面から開くとアプリとして全画面で動き、買い物リストは電波がなくても開ける。

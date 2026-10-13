@@ -60,7 +60,7 @@ flowchart LR
 | S5 | 料理詳細 | 材料・分量、手順、調理時間、評価(★)・メモ、お気に入り登録 | F5 |
 | S6 | 買い物リスト | ジャンル別セクション、チェックボックス、購入済みを下に移動、手動追加 | F3, F4 |
 | S7 | お気に入り | 保存済み料理の一覧(評価の高い順)、料理名・食材で検索、区分・15分以内で絞り込み | F5 |
-| S8 | 設定 | 家族メンバー、アレルギー・苦手食材、時短の上限時間、夕食の比率 | F13 |
+| S8 | 設定 | 家族メンバー(名前・生年月日・性別・活動量)、食べられないもの(アレルギー / 絶対NG / なるべく避ける、誰が)、時短の上限時間(5〜60分)、夕食の比率(表示のみ)、ログインできるアカウント(表示のみ) | F13 |
 | S9 | 栄養サマリー | 期間の栄養素と目標の比較、アドバイス(出典付き) | F6, F7(第2段階) |
 
 ### 2.2 画面遷移
@@ -254,7 +254,7 @@ create policy "household access" on meal_plan_days
 
 | リソース | 操作 |
 |---|---|
-| members, member_food_restrictions, household_settings | CRUD |
+| members, member_food_restrictions, household_settings | CRUD(S8)。制限は `(member_id, label)` で upsert し、食材マスタの名前・別名に一致すれば `ingredient_id` を付ける(献立生成で表記ゆれも判定するため)。画面では同じ食材を1つにまとめ、家族のうち最も厳しい種類で表示する |
 | meal_plans, meal_plan_days | `save_plan_draft` RPC で期間と日ごとのモードを1トランザクションで作成・変更。決定(status = confirmed) |
 | leftovers | CRUD |
 | recipes | お気に入り・評価・メモの更新、手動登録 |
