@@ -2,27 +2,27 @@
 
 | 項目 | 内容 |
 |---|---|
-| バージョン | v0.2 |
-| 作成日 | 2026-10-12 |
-| 前提 | [01_requirements.md](01_requirements.md) v0.3 / [02_design.md](02_design.md) v0.1 |
-| フェーズ | ④ 技術選定 |
+| バージョン | v0.3 |
+| 作成日 | 2026-10-12(更新 2026-10-13) |
+| 前提 | [01_requirements.md](01_requirements.md) v0.4 / [02_design.md](02_design.md) v0.4 |
+| 状態 | 選定済み。実装で使っているものに合わせて更新 |
 
 ---
 
-## 1. 選定結果(案)
+## 1. 選定結果
 
-| レイヤー | 採用(案) | 状態 |
+| レイヤー | 採用 | 状態 |
 |---|---|---|
 | 認証・DB・同期 | Supabase(Auth / PostgreSQL / Realtime) | **決定済み** |
 | サーバー処理 | Supabase Edge Functions(Deno / TypeScript) | **決定** |
 | フロントエンド | **React + Vite + TypeScript + vite-plugin-pwa** | **決定**(2026-10-12) |
-| UI | Tailwind CSS + shadcn/ui | 案 |
+| UI | Tailwind CSS 4(デザイントークンを `@theme` で定義。UI ライブラリは使わない) | **決定**(2026-10-12) |
 | データ取得 | supabase-js + TanStack Query | **決定**(実装済み) |
 | オフライン | Service Worker(Workbox)+ TanStack Query のキャッシュ保存(localStorage)と一時停止したミューテーション | **決定**(2026-10-12。リストは数十行なので IndexedDB は不要と判断) |
 | ホスティング | Vercel(Hobby プラン、静的配信、Git 連携で自動デプロイ) | **決定**(2026-10-13。当初案の Cloudflare Pages から変更) |
-| LLM | **Claude Sonnet 5.5(献立生成)+ Claude Haiku 5.5(軽い処理)** | **決定**(2026-10-12。実装初期の比較で最終確認) |
-| データ整備スクリプト | Python(食品成分表の取り込み) | 案 |
-| CI / 定期実行 | GitHub Actions | 案 |
+| LLM | **Claude Sonnet 5.5(献立生成・再提案)**。Haiku 5.5 は軽い処理の候補(現状は未使用) | **決定**(2026-10-12。比較は [04_model_evaluation.md](04_model_evaluation.md)) |
+| データ整備スクリプト | Python(食品成分表の取り込み) | 案(未着手) |
+| CI / 定期実行 | GitHub Actions(lint・型チェック・テスト・DB テスト、keep-alive) | **決定** |
 
 ## 2. フロントエンド
 
@@ -103,7 +103,7 @@
 - モデル名は Edge Function の環境変数で切り替えられるようにし、⑤実装の最初に**同じ入力で 2〜3 モデルの献立を比較**してから確定します
 
 ```ts
-// supabase/functions/_shared/llm.ts(イメージ)
+// 実装は supabase/functions/_shared/anthropic.ts(下はイメージ)
 import Anthropic from "npm:@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
@@ -128,9 +128,9 @@ export async function generatePlan(prompt: string, schema: object) {
 |---|---|---|
 | フロントエンド配信 | Vercel(Hobby プラン、個人・非商用) | 0円 |
 | 認証・DB・同期・Edge Functions | Supabase(無料プラン) | 0円 |
-| LLM | Claude API | 約200円(Sonnet 中心の場合) |
+| LLM | Claude API | 約120円(Sonnet 5.5、月6回の生成。04_model_evaluation.md の実測から) |
 | CI・定期実行 | GitHub Actions(非公開リポジトリの無料枠) | 0円 |
-| **合計** | | **約200円/月** |
+| **合計** | | **約120円/月**(再提案の回数で増減) |
 
 ## 5. 開発環境・ツール
 
@@ -140,9 +140,9 @@ export async function generatePlan(prompt: string, schema: object) {
 | ローカル開発 | Supabase CLI(`supabase start` でローカルに DB・Auth・Edge Functions を起動) |
 | DB マイグレーション | Supabase CLI(`supabase/migrations/*.sql`) |
 | 型生成 | `supabase gen types typescript` で DB スキーマから TypeScript の型を生成 |
-| テスト | Vitest(ロジック)、Playwright(画面操作)、pgTAP(RLS のテスト) |
+| テスト | Vitest(買い物リスト・献立の検証などのロジック)、pgTAP(RLS・権限・RPC) |
 | Lint / Format | ESLint + Prettier |
-| CI | GitHub Actions(lint・型チェック・テスト、keep-alive、月次バックアップ) |
+| CI | GitHub Actions(lint・型チェック・テスト・DB テスト・Edge Functions の型チェック、keep-alive) |
 
 ### 5.1 RLS のテスト
 
@@ -166,30 +166,32 @@ select * from finish();
 rollback;
 ```
 
-## 6. ディレクトリ構成(案)
+## 6. ディレクトリ構成
 
 ```
 kondate-app/
 ├── apps/
 │   └── web/                  # React + Vite PWA
 │       ├── src/
-│       │   ├── pages/        # S0〜S9
-│       │   ├── features/     # plan / shopping / favorites / settings
-│       │   ├── lib/          # supabase クライアント、オフラインキュー
+│       │   ├── routes/       # 画面(S0〜S8)
+│       │   ├── components/   # 共通部品(献立カード、シートなど)
+│       │   ├── lib/          # データ取得・買い物リスト計算などのロジック
+│       │   ├── auth/         # ログイン状態、許可リストの確認
 │       │   └── types/        # supabase gen types の出力
 │       └── vite.config.ts
+├── packages/
+│   └── plan-eval/            # 献立生成のモデル比較ツール、生成ロジックのテスト
 ├── supabase/
-│   ├── migrations/           # テーブル定義、RLS
+│   ├── migrations/           # テーブル定義、RLS、権限、RPC
 │   ├── functions/
-│   │   ├── _shared/          # LLM クライアント、検証ロジック、スキーマ
+│   │   ├── _shared/          # Claude クライアント、プロンプト・スキーマ・検証
 │   │   ├── generate-plan/
 │   │   └── regenerate/
-│   ├── seed.sql              # 食材マスタ、売り場カテゴリ
-│   └── tests/                # pgTAP
-├── scripts/
-│   └── ingredients/          # Python: 食品成分表から食材マスタを生成
-├── .github/workflows/        # ci.yml / keep-alive.yml / backup.yml
-└── docs/
+│   ├── seed.sql              # ローカル開発用のデータ
+│   └── tests/database/       # pgTAP
+├── .github/workflows/        # ci.yml / keep-alive.yml
+├── docs/
+└── vercel.json
 ```
 
 ## 7. 食材マスタの作り方
@@ -201,7 +203,7 @@ kondate-app/
 | 3 | 売り場カテゴリ・基本単位・1個あたりの重さ・日持ち目安を付与(LLM で下書きし、手で確認) |
 | 4 | `seed.sql` として出力 |
 
-成分表との対応付け(食品番号)は第2段階の栄養機能で使います。MVP では手順 3 までで買い物リストが動きます。
+**未着手**。本番の食材マスタは空のまま運用しており、買い物リストの売り場はキーワードで推定している。成分表との対応付け(食品番号)は第2段階の栄養機能で使う。
 
 ## 8. 決定履歴
 
@@ -210,6 +212,8 @@ kondate-app/
 | 2026-10-12 | フロントエンドは React + Vite(PWA) |
 | 2026-10-12 | 献立生成は Claude Sonnet 5.5 中心、軽い処理は Claude Haiku 5.5 |
 | 2026-10-12 | 実装前に Claude Design で画面デザインを固める |
+| 2026-10-12 | UI は Tailwind CSS 4 のみ。オフラインは TanStack Query のキャッシュ保存と一時停止したミューテーションで実現 |
+| 2026-10-13 | ホスティングは Cloudflare Pages の案をやめ、Vercel に決定 |
 
 ## 出典
 
