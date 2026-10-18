@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
+import { AppErrorBoundary, CACHE_KEY } from "./components/AppErrorBoundary";
 import { AuthProvider } from "./auth/AuthProvider";
 import { registerShoppingMutations } from "./lib/shoppingList";
 import "./index.css";
@@ -29,24 +30,32 @@ onlineManager.setOnline(navigator.onLine);
 // opens in the shop even without a connection.
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "kondate-cache",
+  key: CACHE_KEY,
 });
+
+// Bump when the shape of cached data changes (e.g. a new field on Plan), so data saved by
+// an older version is dropped instead of crashing the screens. Checks not yet sent are
+// dropped with it, so do this only when needed.
+// v2 (2026-10-18): make-ahead fields (PlanDish.madeOn / alsoOn).
+const CACHE_VERSION = "v2";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root not found");
 
 createRoot(root).render(
   <StrictMode>
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7, buster: "v1" }}
-      onSuccess={() => void queryClient.resumePausedMutations()}
-    >
-      <AuthProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </AuthProvider>
-    </PersistQueryClientProvider>
+    <AppErrorBoundary>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7, buster: CACHE_VERSION }}
+        onSuccess={() => void queryClient.resumePausedMutations()}
+      >
+        <AuthProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </AuthProvider>
+      </PersistQueryClientProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 );
