@@ -122,6 +122,8 @@ export async function loadPlanContext(
 export interface CurrentDishRow {
   id: string;
   position: number;
+  /** Make-ahead (作り置き): the dish of the day it is cooked. */
+  madeOn?: { id: string; date: string };
   title: string;
   course: Course;
   cook_minutes: number;
@@ -144,6 +146,7 @@ interface DayQueryRow {
     id: string;
     position: number;
     course: Course;
+    made_on: string | null;
     recipes: One<{
       title: string;
       cook_minutes: number;
@@ -156,22 +159,26 @@ export async function loadCurrentDays(db: SupabaseClient, planId: string): Promi
   const { data, error } = await db
     .from("meal_plan_days")
     .select(
-      "id, date, mode, planned_dishes(id, position, course, recipes(title, cook_minutes, recipe_ingredients(raw_name, is_pantry, position)))",
+      "id, date, mode, planned_dishes(id, position, course, made_on, recipes(title, cook_minutes, recipe_ingredients(raw_name, is_pantry, position)))",
     )
     .eq("meal_plan_id", planId)
     .eq("meal_type", "dinner")
     .order("date");
   if (error) return null;
-  return ((data ?? []) as unknown as DayQueryRow[]).map((day) => ({
+  const rows = (data ?? []) as unknown as DayQueryRow[];
+  const dateOfDish = new Map(rows.flatMap((day) => day.planned_dishes.map((p) => [p.id, day.date] as const)));
+  return rows.map((day) => ({
     id: day.id,
     date: day.date,
     mode: day.mode,
     dishes: day.planned_dishes
       .map((p) => {
         const recipe = one(p.recipes);
+        const madeOnDate = p.made_on ? dateOfDish.get(p.made_on) : undefined;
         return {
           id: p.id,
           position: p.position,
+          madeOn: p.made_on && madeOnDate ? { id: p.made_on, date: madeOnDate } : undefined,
           title: recipe?.title ?? "",
           course: p.course,
           cook_minutes: recipe?.cook_minutes ?? 0,

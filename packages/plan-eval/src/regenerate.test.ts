@@ -239,3 +239,83 @@ describe("regenerate a whole day", () => {
     expect(JSON.parse(user.split("\n\n")[1]!).dayNumber).toBe(4);
   });
 });
+
+describe("make-ahead dishes (作り置き)", () => {
+  // 10/13's main is cooked in a double batch and eaten again on 10/14 (quick) and 10/16.
+  const source = { ...current[0]!.dishes[1]!, id: "d13-main" };
+  const madeAhead = { ...source, id: "", madeOn: { id: "d13-main", date: "2026-10-13" } };
+  const withMadeAhead: CurrentDay[] = [
+    { ...current[0]!, dishes: current[0]!.dishes.map((d, i) => (i === 1 ? source : d)) },
+    {
+      ...current[1]!,
+      dishes: [
+        { ...madeAhead, id: "d14-main" },
+        {
+          title: "きゅうりの浅漬け",
+          course: "side",
+          cook_minutes: 3,
+          main_ingredients: ["きゅうり"],
+        },
+      ],
+    },
+    current[2]!,
+    {
+      ...current[3]!,
+      dishes: current[3]!.dishes.map((d) =>
+        d.course === "main" ? { ...madeAhead, id: "d16-main" } : d,
+      ),
+    },
+  ];
+  const req = (overrides: Partial<RegenerateRequest>) =>
+    request({ current: withMadeAhead, ...overrides });
+
+  it("keeps the make-ahead dish when its day is re-suggested", async () => {
+    const model = fakeModel([
+      [
+        outlineDish("ご飯", "staple", 0, ["米"]),
+        outlineDish("ひじきの煮物", "side", 15, ["ひじき", "にんじん"]),
+        outlineDish("なめこの味噌汁", "soup", 5, ["なめこ"]),
+      ],
+    ]);
+    const result = await regenerate(req({ date: "2026-10-16" }), model.call);
+    expect(result.failure).toBeNull();
+    expect(result.dishes?.map((d) => d.course)).toEqual(["staple", "side", "soup"]);
+    // Eating the batch again is not a repeat.
+    expect(result.warnings.map((w) => w.code)).not.toContain("DUPLICATE_TITLE");
+    const payload = JSON.parse(model.requests[0]!.messages[0]!.content.split("\n\n")[1]!);
+    expect(payload.keepDishes).toEqual([
+      expect.objectContaining({ title: source.title, madeAheadOn: "2026-10-13", cook_minutes: 5 }),
+    ]);
+    expect(payload.before).not.toContain(source.title);
+  });
+
+  it("counts a make-ahead dish as warming up on a quick day", async () => {
+    const model = fakeModel([[outlineDish("ミニトマトのマリネ", "side", 8, ["ミニトマト"])]]);
+    const result = await regenerate(req({ date: "2026-10-14", dishIndex: 1 }), model.call);
+    // 15 minutes to cook, but 5 to warm up: 5 + 8 fits in 15.
+    expect(result.attempts.flatMap((a) => a.violations)).toEqual([]);
+    expect(result.dishes?.[0]?.title).toBe("ミニトマトのマリネ");
+  });
+
+  it("tells the model when the dish to replace is eaten again later", async () => {
+    const model = fakeModel([
+      [outlineDish("筑前煮", "main", 30, ["鶏もも肉", "ごぼう", "れんこん"])],
+    ]);
+    await regenerate(req({ dishIndex: 1 }), model.call);
+    const payload = JSON.parse(model.requests[0]!.messages[0]!.content.split("\n\n")[1]!);
+    expect(payload.madeAheadFor).toEqual([{ course: "main", dates: ["2026-10-14", "2026-10-16"] }]);
+  });
+
+  it("has nothing to re-suggest on a day of only make-ahead dishes", async () => {
+    const onlyMadeAhead: CurrentDay[] = withMadeAhead.map((d) =>
+      d.date === "2026-10-14" ? { ...d, dishes: [d.dishes[0]!] } : d,
+    );
+    const model = fakeModel([]);
+    const result = await regenerate(
+      request({ current: onlyMadeAhead, date: "2026-10-14" }),
+      model.call,
+    );
+    expect(result.failure).toContain("作り置き");
+    expect(model.requests).toHaveLength(0);
+  });
+});

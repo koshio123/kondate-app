@@ -399,6 +399,7 @@ export type Database = {
         Row: {
           course: string;
           id: string;
+          made_on: string | null;
           meal_plan_day_id: string;
           position: number;
           recipe_id: string;
@@ -407,6 +408,7 @@ export type Database = {
         Insert: {
           course: string;
           id?: string;
+          made_on?: string | null;
           meal_plan_day_id: string;
           position?: number;
           recipe_id: string;
@@ -414,11 +416,19 @@ export type Database = {
         Update: {
           course?: string;
           id?: string;
+          made_on?: string | null;
           meal_plan_day_id?: string;
           position?: number;
           recipe_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "planned_dishes_made_on_fkey";
+            columns: ["made_on"];
+            isOneToOne: false;
+            referencedRelation: "planned_dishes";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "planned_dishes_meal_plan_day_id_fkey";
             columns: ["meal_plan_day_id"];
@@ -668,6 +678,7 @@ export type Database = {
         Args: { p_dish: Json; p_household: string; p_servings: number };
         Returns: string;
       };
+      make_ahead: { Args: { p_source_dish: string; p_targets: Json }; Returns: undefined };
       my_household_id: { Args: Record<PropertyKey, never>; Returns: string };
       replace_planned_dishes: {
         Args: {

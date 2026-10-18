@@ -52,6 +52,12 @@ export interface GeneratedDish {
   steps: string[];
   /** Names from the leftovers input that this dish uses. */
   uses_leftovers: string[];
+  /**
+   * Cooked on an earlier day and eaten again (作り置き). Never in model output; set when an
+   * existing plan is checked. Counts as REHEAT_MINUTES and is not checked again for repeats,
+   * restrictions or perishables.
+   */
+  made_ahead?: boolean;
 }
 
 export interface GeneratedDay {

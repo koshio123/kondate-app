@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { formatIsoShort } from "@/lib/date";
+import { dishLink, dishMinutes } from "@/lib/makeAhead";
 import { COURSE_LABEL, type PlanDay, type PlanDish } from "@/lib/plans";
 import { RefreshIcon } from "./icons";
 import { ModeBadge } from "./ModeBadge";
@@ -43,7 +44,7 @@ export function DayMenuCard({
     );
   }
 
-  const total = day.dishes.reduce((sum, d) => sum + (d.recipe?.cook_minutes ?? 0), 0);
+  const total = day.dishes.reduce((sum, d) => sum + dishMinutes(d), 0);
   return (
     <section
       aria-label={label}
@@ -84,17 +85,23 @@ export function DayMenuCard({
           {day.dishes.map((dish) => (
             <li key={dish.id} className="flex items-center">
               <Link
-                to={dish.recipe ? `/dishes/${dish.recipe.id}` : "#"}
-                className="flex min-h-11 flex-1 items-center gap-2.5 text-ink"
+                to={dishLink(dish)}
+                className="flex min-h-11 flex-1 items-center gap-2.5 py-1 text-ink"
               >
                 <span className="w-8 shrink-0 text-xs text-muted">{COURSE_LABEL[dish.course]}</span>
-                <span
-                  className={`flex-1 text-[15px] ${dish.course === "main" || dish.course === "one_dish" ? "font-bold" : ""}`}
-                >
-                  {dish.recipe?.title ?? "(削除された料理)"}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className={`text-[15px] ${dish.course === "main" || dish.course === "one_dish" ? "font-bold" : ""}`}
+                  >
+                    {dish.recipe?.title ?? "(削除された料理)"}
+                  </span>
+                  <MakeAheadNote dish={dish} />
                 </span>
                 {dish.course !== "staple" ? (
-                  <span className="text-xs text-muted">{dish.recipe?.cook_minutes ?? 0}分</span>
+                  <span className="text-xs text-muted">
+                    {dish.madeOn ? "温め" : ""}
+                    {dishMinutes(dish)}分
+                  </span>
                 ) : null}
               </Link>
               {edit ? (
@@ -126,5 +133,22 @@ export function DayMenuCard({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+/** "10/13(月)の作り置き" on the later day, "多めに作る(10/15・10/16にも)" on the cooking day. */
+function MakeAheadNote({ dish }: { dish: PlanDish }) {
+  if (dish.madeOn) {
+    return (
+      <span className="text-xs font-bold text-leftover">
+        作り置き・{formatIsoShort(dish.madeOn.date)}に作ったもの
+      </span>
+    );
+  }
+  if (dish.alsoOn.length === 0) return null;
+  return (
+    <span className="text-xs font-bold text-leftover">
+      {dish.alsoOn.length + 1}回分作る({dish.alsoOn.map(formatIsoShort).join("・")}にも)
+    </span>
   );
 }

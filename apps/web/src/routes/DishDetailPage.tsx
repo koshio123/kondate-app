@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { BackIcon, HeartIcon } from "@/components/icons";
+import { formatIsoShort } from "@/lib/date";
 import { formatAmount } from "@/lib/leftovers";
+import { MAKE_AHEAD_MAX_DAYS } from "@/lib/makeAhead";
 import { COURSE_LABEL, useRecipe, useUpdateRecipe } from "@/lib/plans";
 
 /** S5 料理詳細 */
@@ -20,6 +22,15 @@ function DishDetail({ recipe }: { recipe: Recipe }) {
   const navigate = useNavigate();
   const update = useUpdateRecipe(recipe.id);
   const [note, setNote] = useState(recipe.note);
+  // From a plan: "?meals=3" on the cooking day of a make-ahead dish, "?madeOn=<date>" on a later day.
+  const [params] = useSearchParams();
+  const batchMeals = Math.min(
+    Math.max(Number(params.get("meals")) || 1, 1),
+    MAKE_AHEAD_MAX_DAYS + 1,
+  );
+  const madeOn = params.get("madeOn");
+  const [meals, setMeals] = useState(batchMeals);
+  const scaled = (amount: number | null) => (amount === null ? null : amount * meals);
   const main = recipe.recipe_ingredients.filter((i) => !i.is_pantry);
   const pantry = recipe.recipe_ingredients.filter((i) => i.is_pantry);
 
@@ -56,10 +67,39 @@ function DishDetail({ recipe }: { recipe: Recipe }) {
               </span>
             ) : null}
             <span className="rounded-full border border-line bg-surface px-2.5 py-1">
-              {recipe.servings}人分
+              {recipe.servings * meals}人分
             </span>
           </div>
         </div>
+
+        {madeOn && /^\d{4}-\d{2}-\d{2}$/.test(madeOn) ? (
+          <p className="rounded-2xl bg-leftover-soft px-4 py-3 text-[13px] leading-relaxed text-leftover">
+            <span className="font-bold">{formatIsoShort(madeOn)}に多めに作った作り置きです。</span>
+            <br />
+            冷蔵(日がたつなら冷凍)で保存し、温めて食べます。作り方と材料は作る日のものです。
+          </p>
+        ) : null}
+        {batchMeals > 1 ? (
+          <div className="flex flex-col gap-2 rounded-2xl bg-leftover-soft px-4 py-3">
+            <p className="text-[13px] leading-relaxed text-leftover">
+              <span className="font-bold">作り置きの分も作る日です。</span>
+              材料は{batchMeals}回分の量で表示しています。
+            </p>
+            <div role="group" aria-label="材料の量" className="flex gap-1.5">
+              {[1, batchMeals].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  aria-pressed={meals === n}
+                  onClick={() => setMeals(n)}
+                  className={`h-9 rounded-full px-3.5 text-[13px] ${meals === n ? "bg-leftover font-bold text-white" : "border border-[#BFD3AE] bg-surface"}`}
+                >
+                  {n}回分
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {recipe.recipe_ingredients.length > 0 ? (
           <section
@@ -73,7 +113,7 @@ function DishDetail({ recipe }: { recipe: Recipe }) {
               {main.map((i) => (
                 <li key={i.id} className="flex justify-between gap-3">
                   <span>{i.raw_name}</span>
-                  <span className="text-muted">{formatAmount(i.amount, i.unit)}</span>
+                  <span className="text-muted">{formatAmount(scaled(i.amount), i.unit)}</span>
                 </li>
               ))}
             </ul>
@@ -81,7 +121,7 @@ function DishDetail({ recipe }: { recipe: Recipe }) {
               <ul className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-dashed border-line pt-2 text-[13px] text-muted">
                 {pantry.map((i) => (
                   <li key={i.id}>
-                    {i.raw_name} {formatAmount(i.amount, i.unit)}
+                    {i.raw_name} {formatAmount(scaled(i.amount), i.unit)}
                   </li>
                 ))}
               </ul>

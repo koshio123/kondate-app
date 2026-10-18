@@ -12,18 +12,21 @@ export type ResuggestTarget = { day: PlanDay; dish?: PlanDish };
 
 /**
  * Bottom sheet for re-suggesting a day or a dish (S4). For a dish it also lists favourites
- * of the same course to put in its place.
+ * of the same course to put in its place, and offers to make it ahead for later days.
  */
 export function ResuggestSheet({
   target,
   onClose,
   onRegenerate,
   onSwap,
+  onMakeAhead,
 }: {
   target: ResuggestTarget;
   onClose: () => void;
   onRegenerate: (hint: string) => void;
   onSwap: (recipeId: string) => void;
+  /** Opens the make-ahead sheet; omitted when the dish cannot be made ahead. */
+  onMakeAhead?: () => void;
 }) {
   const [hint, setHint] = useState("");
   const { day, dish } = target;
@@ -43,6 +46,27 @@ export function ResuggestSheet({
       subtitle={dish?.recipe ? `いま:${dish.recipe.title}` : undefined}
       onClose={onClose}
     >
+      {dish?.madeOn ? (
+        <p className="rounded-2xl bg-leftover-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-leftover">
+          {formatIsoShort(dish.madeOn.date)}
+          に多めに作る作り置きです。入れ替えると、この日に作る料理になります。
+        </p>
+      ) : null}
+      {onMakeAhead ? (
+        <button
+          type="button"
+          onClick={onMakeAhead}
+          className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-2.5 text-left"
+        >
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[15px] font-bold">作り置きにして、ほかの日にも食べる</span>
+            <span className="text-xs text-muted">多めに作り、あとの日は温めるだけにします</span>
+          </span>
+          <span aria-hidden="true" className="text-lg text-muted">
+            ›
+          </span>
+        </button>
+      ) : null}
       <form onSubmit={submit} className="flex flex-col gap-2.5">
         <label htmlFor="resuggest-hint" className="text-[13px] font-bold">
           希望があれば(任意)

@@ -53,6 +53,11 @@ export interface ValidationResult {
   metrics: PlanMetrics;
 }
 
+/** Minutes counted for a make-ahead dish: warming it up. */
+export const REHEAT_MINUTES = 5;
+
+const minutesOf = (dish: GeneratedDish) => (dish.made_ahead ? REHEAT_MINUTES : dish.cook_minutes);
+
 /**
  * Checks a generated plan against the hard rules in docs/02_design.md "5.3".
  * Violations mean the plan must not be shown; warnings are shown alongside it.
@@ -100,7 +105,7 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
       }
     }
     if (mode === "quick") {
-      const total = day.dishes.reduce((sum, d) => sum + d.cook_minutes, 0);
+      const total = day.dishes.reduce((sum, d) => sum + minutesOf(d), 0);
       if (total > input.quickMaxMinutes) {
         violations.push({
           code: "QUICK_TOO_LONG",
@@ -126,6 +131,7 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
     const terms = restrictionTerms(restriction);
     for (const day of plan.days) {
       for (const dish of day.dishes) {
+        if (dish.made_ahead) continue; // checked on the day it is cooked
         const hits = [dish.title, ...dish.ingredients.map((i) => i.name)].filter((name) =>
           containsAnyTerm(name, terms),
         );
@@ -182,7 +188,10 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
   }
 
   // --- repetition -------------------------------------------------------
-  const titles = plan.days.flatMap((day) => day.dishes.filter((d) => d.course !== "staple").map((d) => d.title));
+  // A make-ahead dish is the same cooking eaten again, not a repeat.
+  const titles = plan.days.flatMap((day) =>
+    day.dishes.filter((d) => d.course !== "staple" && !d.made_ahead).map((d) => d.title),
+  );
   const counts = new Map<string, number>();
   for (const title of titles) counts.set(title, (counts.get(title) ?? 0) + 1);
   for (const [title, count] of counts) {
@@ -204,6 +213,7 @@ export function validatePlan(input: PlanInput, plan: GeneratedPlan): ValidationR
       const dayIndex = daysBetween(start, day.date);
       if (dayIndex < PERISHABLE_LAST_DAY_INDEX + 1) continue;
       for (const dish of day.dishes) {
+        if (dish.made_ahead) continue; // bought and cooked on an earlier day
         const hits = dish.ingredients
           .filter((i) => !i.is_pantry)
           .map((i) => i.name)

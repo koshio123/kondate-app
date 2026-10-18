@@ -26,6 +26,10 @@ export interface PlanDish {
   course: Course;
   position: number;
   recipe: { id: string; title: string; cook_minutes: number; is_favorite: boolean } | null;
+  /** Make-ahead (作り置き): the dish of the day it is cooked. */
+  madeOn: { dishId: string; date: string } | null;
+  /** Later dates this dish is eaten again as make-ahead (it is cooked in a bigger batch). */
+  alsoOn: string[];
 }
 
 export interface PlanDay {
@@ -56,7 +60,7 @@ const PLAN_SELECT = `
   id, start_date, end_date, status, request, generation_error, generation_meta,
   meal_plan_days (
     id, date, mode,
-    planned_dishes ( id, course, position, recipes ( id, title, cook_minutes, is_favorite ) )
+    planned_dishes ( id, course, position, made_on, recipes ( id, title, cook_minutes, is_favorite ) )
   )
 `;
 
@@ -64,6 +68,19 @@ const PLAN_SELECT = `
 function toPlan(row: Record<string, unknown>): Plan {
   const days = (row.meal_plan_days as Record<string, unknown>[] | null) ?? [];
   const meta = (row.generation_meta as { warnings?: PlanWarning[] } | null) ?? null;
+  // Make-ahead links: which day each dish is on, and which dishes are eaten again later.
+  const dishRows = days.flatMap((d) =>
+    ((d.planned_dishes as Record<string, unknown>[] | null) ?? []).map((p) => ({
+      id: p.id as string,
+      madeOn: (p.made_on as string | null) ?? null,
+      date: d.date as string,
+    })),
+  );
+  const dateOfDish = new Map(dishRows.map((p) => [p.id, p.date]));
+  const laterDates = new Map<string, string[]>();
+  for (const p of dishRows) {
+    if (p.madeOn) laterDates.set(p.madeOn, [...(laterDates.get(p.madeOn) ?? []), p.date].sort());
+  }
   return {
     id: row.id as string,
     start_date: row.start_date as string,
@@ -78,12 +95,18 @@ function toPlan(row: Record<string, unknown>): Plan {
         date: d.date as string,
         mode: d.mode as DayMode,
         dishes: ((d.planned_dishes as Record<string, unknown>[] | null) ?? [])
-          .map((p) => ({
-            id: p.id as string,
-            course: p.course as Course,
-            position: p.position as number,
-            recipe: (p.recipes as PlanDish["recipe"]) ?? null,
-          }))
+          .map((p) => {
+            const madeOn = (p.made_on as string | null) ?? null;
+            const madeOnDate = madeOn ? dateOfDish.get(madeOn) : undefined;
+            return {
+              id: p.id as string,
+              course: p.course as Course,
+              position: p.position as number,
+              recipe: (p.recipes as PlanDish["recipe"]) ?? null,
+              madeOn: madeOn && madeOnDate ? { dishId: madeOn, date: madeOnDate } : null,
+              alsoOn: laterDates.get(p.id as string) ?? [],
+            };
+          })
           .sort((a, b) => a.position - b.position),
       }))
       .sort((a, b) => a.date.localeCompare(b.date)),
@@ -241,6 +264,33 @@ export function useSwapDish() {
         p_recipe_id: args.recipeId,
       });
       if (error) throw error;
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["favorites"] });
+    },
+  });
+}
+
+/** Eats a dish again on later days (make_ahead), replacing a dish there or adding it. */
+export function useMakeAhead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      dishId: string;
+      targets: { day_id: string; replace_dish_id: string | null }[];
+    }) => {
+      const { error } = await supabase.rpc("make_ahead", {
+        p_source_dish: args.dishId,
+        p_targets: args.targets,
+      });
+      if (error) {
+        throw new Error(
+          error.code === "22023"
+            ? "その日には作り置きできません。献立を読み込み直してからもう一度お試しください。"
+            : "作り置きにできませんでした。電波の良い場所でもう一度お試しください。",
+        );
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["plan"] });

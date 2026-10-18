@@ -8,14 +8,25 @@ import { normalizeFoodName } from "./normalize.ts";
 import { buildDayDetailPrompt } from "./prompt.ts";
 import { DAY_DETAIL_SCHEMA, DISHES_OUTLINE_SCHEMA } from "./schema.ts";
 import type { Course, DayDetail, DayMode, GeneratedDish, OutlineDay, OutlineDish, PlanInput } from "./types.ts";
-import { type Issue, mergeOutline, outlineAsPlan, validateDayDetail, validatePlan } from "./validate.ts";
+import {
+  type Issue,
+  mergeOutline,
+  outlineAsPlan,
+  REHEAT_MINUTES,
+  validateDayDetail,
+  validatePlan,
+} from "./validate.ts";
 
 /** A dish already in the plan. main_ingredients are its non-pantry ingredients. */
 export interface CurrentDish {
+  /** planned_dishes.id; needed to find the make-ahead dishes of a dish. */
+  id?: string;
   title: string;
   course: Course;
   cook_minutes: number;
   main_ingredients: string[];
+  /** Set on a make-ahead dish (作り置き): the dish of the day it is cooked. */
+  madeOn?: { id: string; date: string };
 }
 
 export interface CurrentDay {
@@ -72,12 +83,11 @@ export async function regenerate(
   if (!target || target.mode === "none") {
     return done({ dishes: null, warnings: [], failure: `${request.date} は献立を作る日ではありません` });
   }
-  const replaced: CurrentDish[] =
-    request.dishIndex === undefined
-      ? target.dishes
-      : target.dishes.filter((_, i) => i === request.dishIndex);
-  if (request.dishIndex !== undefined && replaced.length === 0) {
-    return done({ dishes: null, warnings: [], failure: "作り直す料理が見つかりません" });
+  const replaced = replacedDishes(request, target);
+  if (replaced.length === 0) {
+    const failure =
+      request.dishIndex === undefined ? "作り置き以外に作り直す料理がありません" : "作り直す料理が見つかりません";
+    return done({ dishes: null, warnings: [], failure });
   }
 
   // Stage 1: the new dishes
@@ -129,6 +139,29 @@ export async function regenerate(
 // ---------------------------------------------------------------------------
 // Checks
 // ---------------------------------------------------------------------------
+
+/**
+ * The dishes a request replaces: one dish, or every dish of the day except its make-ahead
+ * dishes, which stay (replace_planned_dishes keeps them too).
+ */
+export function replacedDishes(request: RegenerateRequest, target: CurrentDay): CurrentDish[] {
+  return request.dishIndex === undefined
+    ? target.dishes.filter((d) => !d.madeOn)
+    : target.dishes.filter((_, i) => i === request.dishIndex);
+}
+
+/** Later days that eat a replaced dish as make-ahead, by course (the new dish of that course follows). */
+function followerDates(request: RegenerateRequest, replaced: CurrentDish[]): Map<Course, string[]> {
+  const ids = new Map(replaced.filter((d) => d.id).map((d) => [d.id!, d.course]));
+  const byCourse = new Map<Course, string[]>();
+  for (const day of request.current) {
+    for (const dish of day.dishes) {
+      const course = dish.madeOn ? ids.get(dish.madeOn.id) : undefined;
+      if (course) byCourse.set(course, [...(byCourse.get(course) ?? []), day.date]);
+    }
+  }
+  return byCourse;
+}
 
 /** Stage 1 check: the day with the new dishes in place must follow every rule of a full plan. */
 export function checkOutline(
@@ -183,19 +216,25 @@ function checkDay(
   target: CurrentDay,
   newDishes: GeneratedDish[],
 ): { violations: Issue[]; warnings: Issue[] } {
-  const kept =
-    request.dishIndex === undefined ? [] : target.dishes.map(asGeneratedDish);
+  const current = target.dishes.map(asGeneratedDish);
   const dayDishes =
     request.dishIndex === undefined
-      ? newDishes
-      : [...kept.slice(0, request.dishIndex), ...newDishes, ...kept.slice(request.dishIndex + 1)];
+      ? [...newDishes, ...current.filter((d) => d.made_ahead)]
+      : [...current.slice(0, request.dishIndex), ...newDishes, ...current.slice(request.dishIndex + 1)];
+
+  // Make-ahead dishes of a replaced dish become the new dish of the same course.
+  const replacedIds = new Set(replacedDishes(request, target).flatMap((d) => (d.id ? [d.id] : [])));
+  const follow = (dish: CurrentDish): GeneratedDish => {
+    const next = dish.madeOn && replacedIds.has(dish.madeOn.id) ? newDishes.find((n) => n.course === dish.course) : undefined;
+    return next ? { ...next, made_ahead: true } : asGeneratedDish(dish);
+  };
 
   const plan = {
     days: request.current
       .filter((d) => d.mode !== "none")
       .map((d) => ({
         date: d.date,
-        dishes: d.date === request.date ? dayDishes : d.dishes.map(asGeneratedDish),
+        dishes: d.date === request.date ? dayDishes : d.dishes.map(follow),
       })),
   };
   // Leftover checks are about the whole period; a single day is not expected to use them all.
@@ -214,6 +253,7 @@ function asGeneratedDish(dish: CurrentDish): GeneratedDish {
     ingredients: dish.main_ingredients.map((name) => ({ name, amount: null, unit: "", is_pantry: false })),
     steps: [],
     uses_leftovers: [],
+    made_ahead: Boolean(dish.madeOn),
   };
 }
 
@@ -228,6 +268,8 @@ export function buildRegenerateOutlinePrompt(
   const { input } = request;
   const single = request.dishIndex !== undefined;
   const old = single ? target.dishes[request.dishIndex!]! : null;
+  const replaced = replacedDishes(request, target);
+  const madeAheadFor = [...followerDates(request, replaced)].map(([course, dates]) => ({ course, dates }));
 
   const system = [
     `あなたは日本の家庭の夕食献立を考えるアシスタントです。
@@ -236,11 +278,13 @@ export function buildRegenerateOutlinePrompt(
     `# 作り直すもの
 - replace が "dish" のとき: replaceDish の代わりになる1品だけを dishes に出力する。
   通常(normal)の日は区分(course)を replaceDish と同じにする。keepDishes とは同じ日に食べるので、味付け・食材が合うようにし、同じ食材を重ねない。
-- replace が "day" のとき: その日の料理をすべて新しく作り、dishes に出力する。
-- before にある料理とは別の料理にする。hint があれば最優先で反映する。`,
+- replace が "day" のとき: keepDishes 以外の料理をすべて新しく作り、dishes に出力する。
+  keepDishes は前の日に作った作り置きで、そのまま食べる。normal の日は keepDishes と合わせて区分がそろうようにし、keepDishes と同じ区分の料理は出力しない。
+- before にある料理とは別の料理にする。hint があれば最優先で反映する。
+- madeAheadFor にある区分の料理は、多めに作って dates の日にも食べる(作り置き)。冷蔵で日持ちし、温め直してもおいしい料理にする。`,
     `# 日ごとのモード
 - normal: 主食(staple)・主菜(main)・副菜(side)・汁物(soup)を1品ずつ。主食は基本「ご飯」。
-- quick: その日の全料理の cook_minutes の合計を quickMaxMinutes 分以内にする(keepDishes の分も含む)。品数は自由。`,
+- quick: その日の全料理の cook_minutes の合計を quickMaxMinutes 分以内にする(keepDishes の分も含む。作り置きは温めるだけなので 5 分と数える)。品数は自由。`,
     `# 食べられないもの(restrictions)
 - kind が allergy または never の食材は、絶対に使わない。その食材を含む加工品(例: 卵→マヨネーズ、乳→バター・チーズ、小麦→パン粉・小麦粉)も使わない。
 - kind が avoid の食材は、なるべく使わない。`,
@@ -262,12 +306,18 @@ export function buildRegenerateOutlinePrompt(
     mode: target.mode,
     dayNumber: daysBetween(start, request.date) + 1,
     replaceDish: old ? summary(old) : undefined,
-    keepDishes: single ? target.dishes.filter((_, i) => i !== request.dishIndex).map(summary) : undefined,
-    before: (single ? [old!] : target.dishes).map((d) => d.title),
+    keepDishes: target.dishes.filter((d) => !replaced.includes(d)).map(summary),
+    madeAheadFor: madeAheadFor.length > 0 ? madeAheadFor : undefined,
+    before: replaced.map((d) => d.title),
     hint: request.hint?.trim() || undefined,
     otherDays: request.current
       .filter((d) => d.date !== request.date && d.mode !== "none")
-      .map((d) => ({ date: d.date, dishes: d.dishes.map((x) => `${x.title}(${x.main_ingredients.join("・")})`) })),
+      .map((d) => ({
+        date: d.date,
+        dishes: d.dishes.map(
+          (x) => `${x.title}(${x.main_ingredients.join("・")})${x.madeOn ? `[${x.madeOn.date}の作り置き]` : ""}`,
+        ),
+      })),
     servings: input.servings,
     quickMaxMinutes: input.quickMaxMinutes,
     restrictions: input.restrictions.map(({ label, kind }) => ({ label, kind })),
@@ -285,8 +335,9 @@ function summary(dish: CurrentDish) {
   return {
     title: dish.title,
     course: dish.course,
-    cook_minutes: dish.cook_minutes,
+    cook_minutes: dish.madeOn ? REHEAT_MINUTES : dish.cook_minutes,
     main_ingredients: dish.main_ingredients,
+    madeAheadOn: dish.madeOn?.date,
   };
 }
 

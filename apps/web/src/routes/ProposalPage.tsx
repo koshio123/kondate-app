@@ -4,9 +4,12 @@ import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { DeletePlanButton } from "@/components/DeletePlanButton";
 import { AppMark, BackIcon, RefreshIcon } from "@/components/icons";
+import { MakeAheadSheet, type MakeAheadTarget } from "@/components/MakeAheadSheet";
 import { ResuggestSheet, type ResuggestTarget } from "@/components/ResuggestSheet";
+import { makeAheadOptions, remainingDays } from "@/lib/makeAhead";
 import {
   useConfirmPlan,
+  useMakeAhead,
   usePlan,
   useRegenerate,
   useStartGeneration,
@@ -108,6 +111,8 @@ function Proposal({ plan }: { plan: Plan }) {
   const buildList = useBuildShoppingList();
   const partial = useRegenerate();
   const swap = useSwapDish();
+  const makeAhead = useMakeAhead();
+  const [makeAheadTarget, setMakeAheadTarget] = useState<MakeAheadTarget | null>(null);
   // "?day=2026-10-14" (from S2 when a single day of this plan is planned again) opens that day.
   const [params, setParams] = useSearchParams();
   const [sheet, setSheet] = useState<ResuggestTarget | null>(() => {
@@ -116,8 +121,8 @@ function Proposal({ plan }: { plan: Plan }) {
   });
   const [busyDayId, setBusyDayId] = useState<string | null>(null);
   const general = plan.warnings.filter((w) => !w.date).map((w) => w.message);
-  const changing = partial.isPending || swap.isPending;
-  const changeError = partial.error ?? swap.error;
+  const changing = partial.isPending || swap.isPending || makeAhead.isPending;
+  const changeError = partial.error ?? swap.error ?? makeAhead.error;
 
   // A confirmed plan already has a shopping list; rebuild it so it matches (checks are kept).
   const afterChange = () => {
@@ -137,8 +142,25 @@ function Proposal({ plan }: { plan: Plan }) {
   function swapTarget(target: ResuggestTarget, recipeId: string) {
     setSheet(null);
     partial.reset();
+    makeAhead.reset();
     if (target.dish) swap.mutate({ dishId: target.dish.id, recipeId }, { onSuccess: afterChange });
   }
+
+  function makeAheadFor(
+    target: MakeAheadTarget,
+    targets: { day_id: string; replace_dish_id: string }[],
+  ) {
+    setMakeAheadTarget(null);
+    partial.reset();
+    swap.reset();
+    makeAhead.mutate({ dishId: target.dish.id, targets }, { onSuccess: afterChange });
+  }
+
+  // A dish can be made ahead when a later day can take it and it is not at 3 meals yet.
+  const canMakeAhead = (target: ResuggestTarget) =>
+    target.dish !== undefined &&
+    makeAheadOptions(plan.days, target.day, target.dish).length > 0 &&
+    remainingDays(plan.days, target.dish) > 0;
 
   return (
     <>
@@ -146,7 +168,7 @@ function Proposal({ plan }: { plan: Plan }) {
         <p className="mx-1 flex flex-wrap items-center gap-1 text-[13px] leading-relaxed text-muted">
           気になる品は
           <RefreshIcon size={14} className="text-primary" />
-          で入れ替えられます
+          で入れ替え・作り置きにできます
         </p>
         {changeError ? (
           <p
@@ -189,6 +211,22 @@ function Proposal({ plan }: { plan: Plan }) {
           }}
           onRegenerate={(hint) => regenerateTarget(sheet, hint)}
           onSwap={(recipeId) => swapTarget(sheet, recipeId)}
+          onMakeAhead={
+            canMakeAhead(sheet)
+              ? () => {
+                  setSheet(null);
+                  setMakeAheadTarget({ day: sheet.day, dish: sheet.dish! });
+                }
+              : undefined
+          }
+        />
+      ) : null}
+      {makeAheadTarget ? (
+        <MakeAheadSheet
+          days={plan.days}
+          target={makeAheadTarget}
+          onClose={() => setMakeAheadTarget(null)}
+          onSubmit={(targets) => makeAheadFor(makeAheadTarget, targets)}
         />
       ) : null}
 
