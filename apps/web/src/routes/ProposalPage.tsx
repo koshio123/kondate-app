@@ -1,21 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
 import { FullScreenMessage } from "@/components/FullScreenMessage";
 import { DeletePlanButton } from "@/components/DeletePlanButton";
 import { AppMark, BackIcon, RefreshIcon } from "@/components/icons";
-import { MakeAheadSheet, type MakeAheadTarget } from "@/components/MakeAheadSheet";
-import { ResuggestSheet, type ResuggestTarget } from "@/components/ResuggestSheet";
-import { makeAheadOptions, remainingDays } from "@/lib/makeAhead";
-import {
-  useConfirmPlan,
-  useMakeAhead,
-  usePlan,
-  useRegenerate,
-  useStartGeneration,
-  useSwapDish,
-  type Plan,
-} from "@/lib/plans";
+import { usePlanEditor } from "@/components/usePlanEditor";
+import { useConfirmPlan, usePlan, useStartGeneration, type Plan } from "@/lib/plans";
 import { useBuildShoppingList } from "@/lib/shoppingList";
 
 /** S4 献立提案の確認 (also shows the generating / failed states). */
@@ -109,58 +99,17 @@ function Proposal({ plan }: { plan: Plan }) {
   const confirm = useConfirmPlan();
   const regenerate = useStartGeneration();
   const buildList = useBuildShoppingList();
-  const partial = useRegenerate();
-  const swap = useSwapDish();
-  const makeAhead = useMakeAhead();
-  const [makeAheadTarget, setMakeAheadTarget] = useState<MakeAheadTarget | null>(null);
   // "?day=2026-10-14" (from S2 when a single day of this plan is planned again) opens that day.
   const [params, setParams] = useSearchParams();
-  const [sheet, setSheet] = useState<ResuggestTarget | null>(() => {
-    const day = plan.days.find((d) => d.date === params.get("day") && d.mode !== "none");
-    return day ? { day } : null;
-  });
-  const [busyDayId, setBusyDayId] = useState<string | null>(null);
+  const [initialDay] = useState(() =>
+    plan.days.find((d) => d.date === params.get("day") && d.mode !== "none"),
+  );
+  const editor = usePlanEditor(plan, initialDay ? { day: initialDay } : null);
+  useEffect(() => {
+    if (params.has("day")) setParams({}, { replace: true });
+  }, [params, setParams]);
   const general = plan.warnings.filter((w) => !w.date).map((w) => w.message);
-  const changing = partial.isPending || swap.isPending || makeAhead.isPending;
-  const changeError = partial.error ?? swap.error ?? makeAhead.error;
-
-  // A confirmed plan already has a shopping list; rebuild it so it matches (checks are kept).
-  const afterChange = () => {
-    if (plan.status === "confirmed") buildList.mutate(plan.id);
-  };
-
-  function regenerateTarget(target: ResuggestTarget, hint: string) {
-    setSheet(null);
-    setBusyDayId(target.day.id);
-    swap.reset();
-    partial.mutate(
-      { planId: plan.id, dayId: target.day.id, dishId: target.dish?.id, hint },
-      { onSuccess: afterChange, onSettled: () => setBusyDayId(null) },
-    );
-  }
-
-  function swapTarget(target: ResuggestTarget, recipeId: string) {
-    setSheet(null);
-    partial.reset();
-    makeAhead.reset();
-    if (target.dish) swap.mutate({ dishId: target.dish.id, recipeId }, { onSuccess: afterChange });
-  }
-
-  function makeAheadFor(
-    target: MakeAheadTarget,
-    targets: { day_id: string; replace_dish_id: string }[],
-  ) {
-    setMakeAheadTarget(null);
-    partial.reset();
-    swap.reset();
-    makeAhead.mutate({ dishId: target.dish.id, targets }, { onSuccess: afterChange });
-  }
-
-  // A dish can be made ahead when a later day can take it and it is not at 3 meals yet.
-  const canMakeAhead = (target: ResuggestTarget) =>
-    target.dish !== undefined &&
-    makeAheadOptions(plan.days, target.day, target.dish).length > 0 &&
-    remainingDays(plan.days, target.dish) > 0;
+  const { changing, error: changeError } = editor;
 
   return (
     <>
@@ -192,43 +141,12 @@ function Proposal({ plan }: { plan: Plan }) {
             key={day.id}
             day={day}
             warnings={plan.warnings.filter((w) => w.date === day.date).map((w) => w.message)}
-            edit={{
-              onDay: () => setSheet({ day }),
-              onDish: (dish) => setSheet({ day, dish }),
-              busy: busyDayId === day.id,
-              disabled: changing,
-            }}
+            edit={editor.editFor(day)}
           />
         ))}
       </main>
 
-      {sheet ? (
-        <ResuggestSheet
-          target={sheet}
-          onClose={() => {
-            setSheet(null);
-            if (params.has("day")) setParams({}, { replace: true });
-          }}
-          onRegenerate={(hint) => regenerateTarget(sheet, hint)}
-          onSwap={(recipeId) => swapTarget(sheet, recipeId)}
-          onMakeAhead={
-            canMakeAhead(sheet)
-              ? () => {
-                  setSheet(null);
-                  setMakeAheadTarget({ day: sheet.day, dish: sheet.dish! });
-                }
-              : undefined
-          }
-        />
-      ) : null}
-      {makeAheadTarget ? (
-        <MakeAheadSheet
-          days={plan.days}
-          target={makeAheadTarget}
-          onClose={() => setMakeAheadTarget(null)}
-          onSubmit={(targets) => makeAheadFor(makeAheadTarget, targets)}
-        />
-      ) : null}
+      {editor.sheets}
 
       <footer className="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-5 pt-3 pb-[max(24px,env(safe-area-inset-bottom))]">
         {plan.status === "confirmed" ? (
@@ -236,7 +154,7 @@ function Proposal({ plan }: { plan: Plan }) {
             <span className="font-bold">この献立で決定済みです</span>
             <br />
             <span className="text-xs">
-              {buildList.isPending
+              {editor.rebuilding
                 ? "買い物リストを更新しています…"
                 : "入れ替えると買い物リストも更新されます(チェックは残ります)"}
             </span>
@@ -276,7 +194,10 @@ function Proposal({ plan }: { plan: Plan }) {
             </button>
           </>
         )}
-        <DeletePlanButton plan={plan} disabled={changing || buildList.isPending} />
+        <DeletePlanButton
+          plan={plan}
+          disabled={changing || buildList.isPending || editor.rebuilding}
+        />
       </footer>
     </>
   );

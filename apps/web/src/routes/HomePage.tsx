@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { DayMenuCard } from "@/components/DayMenuCard";
-import { CartIcon, PlusIcon } from "@/components/icons";
+import { CartIcon, PlusIcon, RefreshIcon } from "@/components/icons";
 import { PageTitle } from "@/components/ScreenHeader";
+import { usePlanEditor } from "@/components/usePlanEditor";
 import { formatIsoShort, formatMonthDayLong, toIsoDate } from "@/lib/date";
 import { useActivePlans, type Plan } from "@/lib/plans";
 import { useShoppingList } from "@/lib/shoppingList";
@@ -104,22 +105,37 @@ function PlanSummary({ plan }: { plan: Plan }) {
     );
   }
 
-  // Confirmed: today's (or the next) dinner first, then the rest of the period.
+  return <ConfirmedPlan plan={plan} />;
+}
+
+/** Confirmed: today's (or the next) dinner first, then the rest of the period, each editable. */
+function ConfirmedPlan({ plan }: { plan: Plan }) {
+  const editor = usePlanEditor(plan);
   const today = toIsoDate(new Date());
   const upcoming = plan.days.filter((d) => d.date >= today);
   const [next, ...rest] = upcoming.length > 0 ? upcoming : plan.days;
   return (
     <>
-      <ShoppingProgressCard planId={plan.id} />
+      <ShoppingProgressCard planId={plan.id} rebuilding={editor.rebuilding} />
+      <p className="mx-1 -mb-2 flex flex-wrap items-center gap-1 text-[13px] leading-relaxed text-muted">
+        料理の
+        <RefreshIcon size={14} className="text-primary" />
+        から再提案・作り置きにできます
+      </p>
+      {editor.error ? (
+        <p
+          role="alert"
+          className="rounded-2xl border border-[#EBC3B6] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+        >
+          {editor.error.message || "入れ替えられませんでした。もう一度お試しください。"}
+        </p>
+      ) : null}
       {next ? (
         <section aria-labelledby="next-heading" className="flex flex-col gap-2">
           <h2 id="next-heading" className="font-display text-base font-bold">
             {next.date === today ? "今日の夕食" : "次の夕食"}
           </h2>
-          <DayMenuCard
-            day={next}
-            action={<ResuggestLink plan={plan} date={next.date} mode={next.mode} />}
-          />
+          <DayMenuCard day={next} edit={editor.editFor(next)} />
         </section>
       ) : null}
       {rest.length > 0 ? (
@@ -128,17 +144,14 @@ function PlanSummary({ plan }: { plan: Plan }) {
             この先の献立
           </h2>
           {rest.map((day) => (
-            <DayMenuCard
-              key={day.id}
-              day={day}
-              action={<ResuggestLink plan={plan} date={day.date} mode={day.mode} />}
-            />
+            <DayMenuCard key={day.id} day={day} edit={editor.editFor(day)} />
           ))}
         </section>
       ) : null}
       <Link to={`/plans/${plan.id}/proposal`} className="self-center py-1 text-sm text-muted">
         献立全体を見直す・削除する
       </Link>
+      {editor.sheets}
     </>
   );
 }
@@ -176,20 +189,7 @@ function LaterPlans({ plans }: { plans: Plan[] }) {
   );
 }
 
-/** Opens the plan with the re-suggest sheet of that day (S4). */
-function ResuggestLink({ plan, date, mode }: { plan: Plan; date: string; mode: string }) {
-  if (mode === "none") return null;
-  return (
-    <Link
-      to={`/plans/${plan.id}/proposal?day=${date}`}
-      className="flex h-8 items-center rounded-full border border-[#D9CBB9] px-2.5 text-xs text-muted"
-    >
-      この日を再提案
-    </Link>
-  );
-}
-
-function ShoppingProgressCard({ planId }: { planId: string }) {
+function ShoppingProgressCard({ planId, rebuilding }: { planId: string; rebuilding: boolean }) {
   const list = useShoppingList(planId);
   const items = list.data?.items ?? [];
   const done = items.filter((i) => i.checked).length;
@@ -203,7 +203,11 @@ function ShoppingProgressCard({ planId }: { planId: string }) {
         <div className="flex justify-between text-sm">
           <span className="font-bold">買い物リスト</span>
           <span className="text-muted">
-            {list.data ? `${done} / ${items.length} 品` : "まだ作っていません"}
+            {rebuilding
+              ? "更新しています…"
+              : list.data
+                ? `${done} / ${items.length} 品`
+                : "まだ作っていません"}
           </span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-surface">
