@@ -81,4 +81,24 @@ export const SCENARIOS: Scenario[] = [
       recentTitles: [],
     },
   },
+  {
+    id: "classics",
+    title: "5日間+定番料理のリクエスト(材料の抜けの確認)",
+    input: {
+      days: [
+        { date: "2026-10-29", mode: "normal" },
+        { date: "2026-10-30", mode: "normal" },
+        { date: "2026-10-31", mode: "quick" },
+        { date: "2026-11-01", mode: "normal" },
+        { date: "2026-11-02", mode: "normal" },
+      ],
+      servings: 2,
+      quickMaxMinutes: 15,
+      restrictions: [],
+      leftovers: [],
+      recentTitles: [],
+      request:
+        "ハンバーグ、鶏の唐揚げ、親子丼、とんかつ、カレーライスを1回ずつ入れて。副菜にポテトサラダと卵焼きも入れて",
+    },
+  },
 ];

@@ -1,7 +1,7 @@
 import type { LeftoverInput, OutlineDay, PlanInput } from "./types.ts";
 
 /** Bump when the wording changes so evaluation reports can be compared. */
-export const PROMPT_VERSION = "2026-10-12.3";
+export const PROMPT_VERSION = "2026-10-18.1";
 
 const ROLE = `あなたは日本の家庭の夕食献立を考えるアシスタントです。
 入力(JSON)の条件をすべて守ってください。`;
@@ -14,7 +14,7 @@ const MODE_RULES = `# 日ごとのモード
 - none: 献立を作らない。出力の days に含めない。`;
 
 const RESTRICTION_RULES = `# 食べられないもの(restrictions)
-- kind が allergy または never の食材は、絶対に使わない。その食材を含む加工品(例: 卵→マヨネーズ、乳→バター・チーズ、小麦→パン粉・小麦粉)も使わない。
+- kind が allergy または never の食材は、絶対に使わない。その食材を含む加工品も使わない。
 - kind が avoid の食材は、なるべく使わない。`;
 
 const LEFTOVER_RULES = `# 余り物(leftovers)
@@ -35,7 +35,8 @@ const DETAIL_RULES = `# 分量と書き方
 - 塩・醤油・味噌・砂糖・みりん・酒・酢・油・ごま油・片栗粉・小麦粉・だしの素・こしょう・米は is_pantry を true にする。
 - ご飯(主食や丼のご飯)は ingredients に「米」を servings × 0.5 合(単位「合」)で入れる。「ご飯 ◯杯」とは書かない。
 - 食材名は商品名だけを書き、括弧書きの注記(「〜不使用」など)は付けない。
-- 手順は各1文で6つ以内。料理名・食材名は日本語。`;
+- 水は材料には含めない。
+- 手順は各1文とする。料理名・食材名は日本語。`;
 
 /** One-shot: all days with ingredients and steps in a single call (kept for comparison). */
 export function buildPlanPrompt(input: PlanInput): { system: string; user: string } {
@@ -75,10 +76,10 @@ export function buildDayDetailPrompt(
   const used = new Set(day.dishes.flatMap((d) => d.uses_leftovers));
   const leftovers: LeftoverInput[] = input.leftovers.filter((l) => used.has(l.name));
   const system = [
-    `${ROLE}\n献立はすでに決まっています。指定された料理それぞれの材料と手順を作ってください。`,
+    `${ROLE}\n献立はすでに決まっています。指定された料理それぞれの材料と手順を抜け漏れなく作ってください。`,
     `# 守ること
 - dishes は入力と同じ順番・同じ料理名で、すべての料理について出力する。
-- main_ingredients は必ず使う。cook_minutes の時間内で作れる手順にする。
+- main_ingredients は必ず使い、他に必要な材料（下味・つなぎ・衣などを含む）も含めること。
 - uses_leftovers の余り物は、leftovers の量の範囲で使う。`,
     RESTRICTION_RULES,
     DETAIL_RULES,

@@ -2,6 +2,7 @@ import type { GenerationResult } from "../../../supabase/functions/_shared/plan/
 import type { Course } from "../../../supabase/functions/_shared/plan/types.ts";
 import { costUsd, JPY_PER_USD, type ModelCandidate } from "./models.ts";
 import type { Scenario } from "./scenarios.ts";
+import { checkStaples } from "./staples.ts";
 
 export interface RunRecord {
   scenario: Scenario;
@@ -41,6 +42,9 @@ export function summarize(records: RunRecord[]) {
     const thinkingTokens = attempts.reduce((n, a) => n + (a.reply.thinkingTokens ?? 0), 0);
     const totals = runs.map((r) => r.result.totalMs / 1000);
     const costPerRun = costUsd(model, inputTokens, outputTokens) / runs.length;
+    const staples = runs.map((r) =>
+      r.result.plan ? checkStaples(r.result.plan, r.scenario.input.restrictions) : null,
+    );
     return {
       model,
       variant: runs[0]!.variant,
@@ -51,6 +55,8 @@ export function summarize(records: RunRecord[]) {
       avgLeftoverUsage: average(
         runs.map((r) => r.result.validation?.metrics.leftoverUsageRate ?? 0),
       ),
+      stapleChecked: staples.reduce((n, c) => n + (c?.checked ?? 0), 0),
+      stapleMissed: staples.reduce((n, c) => n + (c?.misses.length ?? 0), 0),
       avgTotalSec: average(totals),
       maxTotalSec: Math.max(...totals),
       avgInputTokens: inputTokens / runs.length,
@@ -73,18 +79,19 @@ export function renderReport(
 
   lines.push("## 集計", "");
   lines.push(
-    "| モデル | 方式 | 実行数 | 再生成なしで合格 | 最終合格 | 平均警告 | 余り物使用率 | 所要時間 平均/最大(秒) | 入力tok | 出力tok(うち思考) | 1回あたり | 月額目安(6回) |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    "| モデル | 方式 | 実行数 | 再生成なしで合格 | 最終合格 | 平均警告 | 余り物使用率 | 定番材料の抜け | 所要時間 平均/最大(秒) | 入力tok | 出力tok(うち思考) | 1回あたり | 月額目安(6回) |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   );
   for (const s of summarize(records)) {
     const over = s.maxTotalSec > WALL_CLOCK_LIMIT_SEC ? " ⚠" : "";
     lines.push(
-      `| ${s.model.label} | ${s.variant} | ${s.runs} | ${s.noRetry}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.avgTotalSec.toFixed(1)} / ${s.maxTotalSec.toFixed(1)}${over} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} (${Math.round(s.avgThinkingTokens)}) | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
+      `| ${s.model.label} | ${s.variant} | ${s.runs} | ${s.noRetry}/${s.runs} | ${s.finalOk}/${s.runs} | ${s.avgWarnings.toFixed(1)} | ${pct(s.avgLeftoverUsage)} | ${s.stapleMissed}/${s.stapleChecked}品 | ${s.avgTotalSec.toFixed(1)} / ${s.maxTotalSec.toFixed(1)}${over} | ${Math.round(s.avgInputTokens)} | ${Math.round(s.avgOutputTokens)} (${Math.round(s.avgThinkingTokens)}) | $${s.costPerRunUsd.toFixed(4)} | 約${Math.round(s.monthlyJpy)}円 |`,
     );
   }
   lines.push(
     "",
     `為替は 1 USD = ${JPY_PER_USD} 円で概算。⚠ は Edge Function の上限(${WALL_CLOCK_LIMIT_SEC} 秒)超え。`,
+    "定番材料の抜け: 料理名から決まる定番の材料(ハンバーグ→卵 など、src/staples.ts)がない品数 / 確認した品数。",
     "",
   );
 
@@ -115,6 +122,12 @@ export function renderReport(
         a.violations.map((v) => `- 違反(${a.stage}): ${v.message}`),
       ),
       ...(r.result.validation?.warnings ?? []).map((w) => `- 警告: ${w.message}`),
+      ...(r.result.plan
+        ? checkStaples(r.result.plan, r.scenario.input.restrictions).misses.map(
+            (m) =>
+              `- 定番材料の抜け: ${m.date}「${m.title}」に ${m.missing.join("・")} がない(材料: ${m.ingredients.join("、")})`,
+          )
+        : []),
     ];
     lines.push("", ...(issues.length ? issues : ["- 違反・警告なし"]), "");
   }
